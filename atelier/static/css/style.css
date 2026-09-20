@@ -21,6 +21,8 @@
   --good-bg:     #e6f5e6;
   --critical-bg: #fae8e8;
   --warning-bg:  #fdf3dd;
+  --exit-once:   #b2541a;   /* 4.90:1 sur la surface claire */
+  --exit-more:   #c0272d;   /* 5.73:1 */
   --radius: 10px;
   --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 4%);
 }
@@ -40,6 +42,8 @@
     --good-bg:     #12290f;
     --critical-bg: #351616;
     --warning-bg:  #30260d;
+    --exit-once:   #f0a35e;   /* 8.38:1 sur la surface sombre */
+    --exit-more:   #ff9090;   /* 8.00:1 */
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
   }
 }
@@ -58,6 +62,8 @@
   --good-bg:     #12290f;
   --critical-bg: #351616;
   --warning-bg:  #30260d;
+  --exit-once:   #f0a35e;   /* 8.38:1 sur la surface sombre */
+  --exit-more:   #ff9090;   /* 8.00:1 */
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
 }
 
@@ -266,6 +272,12 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
              color: var(--text-primary); }
 .stale { opacity: .45; }
 
+/* Sorties de fenetre : la couleur du nom alerte au premier coup d'oeil.
+   Elle ne porte jamais l'information seule — le compte figure juste a
+   cote, en deuxieme colonne, et le nom porte un title. */
+.live .name-warn { color: var(--exit-once); font-weight: 600; }
+.live .name-alert { color: var(--exit-more); font-weight: 700; }
+
 .joinbox {
   display: flex; flex-wrap: wrap; gap: 2rem;
   background: var(--surface-0); border: 1px solid var(--border);
@@ -288,6 +300,10 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 .tasknav button[aria-current="true"] { border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent); }
 .tasknav button.done { background: var(--good-bg); border-color: var(--good); }
+.tasknav .level-dots { margin-right: .35rem; font-size: .62rem; }
+.title-row { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+.title-row h2 { margin: 0; }
+.title-row .level-badge { font-size: .75rem; }
 
 .panel {
   background: var(--surface-1); border: 1px solid var(--border);
@@ -487,6 +503,25 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
   padding: 1.5rem;
 }
 .overlay[hidden] { display: none; }
+/* Le rappel de surveillance passe devant tout le reste. */
+#overlay { z-index: 120; }
+/* Selecteur a deux classes : .overlay-card est declaree plus bas et
+   l'emporterait autrement, a specificite egale. */
+.overlay .confirm-card {
+  border-color: var(--border-strong);
+  text-align: left;
+  max-width: 540px;   /* les deux boutons tiennent sur une ligne */
+}
+.confirm-card h2 { margin-top: 0; }
+.confirm-actions {
+  display: flex; gap: .6rem; justify-content: flex-end; flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+.confirm-recap {
+  background: var(--surface-0); border: 1px solid var(--border);
+  border-radius: 8px; padding: .7rem .85rem; font-size: .92rem;
+}
+
 .overlay-card {
   background: var(--surface-1); border: 2px solid var(--critical);
   border-radius: var(--radius); padding: 2rem; max-width: 460px;

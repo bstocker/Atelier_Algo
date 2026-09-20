@@ -26,7 +26,12 @@
     <header class="panel-head">
       <div>
         <span class="eyebrow" id="task-module"></span>
-        <h2 id="task-name">—</h2>
+        <!-- Le badge reste hors du h2 : task-name est réécrit par
+             textContent, ce qui effacerait tout enfant. -->
+        <div class="title-row">
+          <h2 id="task-name">—</h2>
+          <span class="level-badge" id="task-level"></span>
+        </div>
         <p class="muted" id="task-brief"></p>
       </div>
       <span class="pill" id="task-state"></span>
@@ -95,6 +100,21 @@
   <div class="finish-bar">
     <p class="muted" id="finish-hint"></p>
     <button type="button" class="danger" id="finish-btn">Remettre ma copie</button>
+  </div>
+</div>
+
+<!-- Confirmation de remise. Un window.confirm() natif ferait perdre le
+     focus a la page, ce que la surveillance compterait comme une sortie. -->
+<div class="overlay" id="confirm-overlay" hidden role="alertdialog"
+     aria-modal="true" aria-labelledby="confirm-title">
+  <div class="overlay-card confirm-card">
+    <h2 id="confirm-title">Remettre votre copie&nbsp;?</h2>
+    <p>Vous ne pourrez plus répondre après la remise.</p>
+    <p class="confirm-recap" id="confirm-recap"></p>
+    <div class="confirm-actions">
+      <button type="button" class="ghost" id="confirm-no">Continuer l'épreuve</button>
+      <button type="button" class="danger" id="confirm-yes">Remettre définitivement</button>
+    </div>
   </div>
 </div>
 

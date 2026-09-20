@@ -491,6 +491,30 @@ class AtelierTest(unittest.TestCase):
                 with self.subTest(exercice=key, choix=option.id):
                     self.assertTrue(option.note.strip(), option.c)
 
+    def test_exam_page_uses_no_native_dialog(self):
+        """Un dialogue natif fait perdre le focus à la page.
+
+        La surveillance le compterait comme une sortie de fenêtre, et
+        l'élève serait pénalisé pour avoir cliqué sur « Remettre ma copie ».
+        """
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "atelier", "static", "js", "exercise.js")
+        with open(source, encoding="utf-8") as fh:
+            lignes = [l for l in fh if not l.strip().startswith("//")]
+        for appel in ("window.confirm", "window.alert", "window.prompt"):
+            with self.subTest(appel=appel):
+                self.assertFalse([l for l in lignes if appel in l], appel)
+
+    def test_student_receives_the_difficulty_of_each_exercise(self):
+        _, code = self.make_session(patterns=("ligne", "losange"))
+        client, _ = self.join(code)
+        me = client.get("/api/me").get_json()
+        niveaux = {t["key"]: (t["level"], t["level_name"]) for t in me["tasks"]}
+        self.assertEqual(niveaux["ligne"], (1, "Découverte"))
+        self.assertEqual(niveaux["losange"], (4, "Avancé"))
+        task = client.get("/api/task/losange").get_json()
+        self.assertEqual(task["level_name"], "Avancé")
+
     def test_unknown_pattern_is_404(self):
         _, code = self.make_session(patterns=("carre",))
         client, _ = self.join(code)

@@ -62,9 +62,11 @@
     head.textContent = "";
     var row = document.createElement("tr");
     row.appendChild(th("Étudiant"));
+    // Les sorties passent en deuxième : c'est ce que l'enseignant surveille
+    // en priorité pendant l'épreuve.
+    row.appendChild(th("Sorties"));
     data.patterns.forEach(function (p) { row.appendChild(th(p.name, "rotate")); });
     row.appendChild(th("Réussis"));
-    row.appendChild(th("Sorties"));
     row.appendChild(th("Pénalité"));
     row.appendChild(th("Note /20"));
     row.appendChild(th("\u00c9tat"));
@@ -91,7 +93,18 @@
       var seen = s.last_seen ? Date.parse(s.last_seen) : 0;
       if (!s.finished && now - seen > STALE_MS) row.className = "stale";
 
-      row.appendChild(td(s.name));
+      var nom = td(s.name);
+      // La couleur alerte au premier coup d'œil ; le compte, juste à côté,
+      // porte l'information pour ne jamais dépendre de la seule teinte.
+      if (s.exits >= 2) {
+        nom.className = "name-alert";
+        nom.title = s.exits + " sorties de fenêtre";
+      } else if (s.exits === 1) {
+        nom.className = "name-warn";
+        nom.title = "1 sortie de fenêtre";
+      }
+      row.appendChild(nom);
+      row.appendChild(td(String(s.exits), "num"));
 
       s.cells.forEach(function (c) {
         var cell = document.createElement("td");
@@ -116,7 +129,6 @@
       });
 
       row.appendChild(td(s.solved + " / " + s.total, "num"));
-      row.appendChild(td(String(s.exits), "num"));
       row.appendChild(td(s.penalty ? "−" + s.penalty.toFixed(0) : "—", "num"));
       row.appendChild(td(s.score.toFixed(2), "num strong"));
 

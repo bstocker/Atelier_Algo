@@ -231,6 +231,7 @@ def api_me():
             "key": t["pattern_key"],
             "name": ex.PATTERNS[t["pattern_key"]].name,
             "level": ex.PATTERNS[t["pattern_key"]].level,
+            "level_name": ex.LEVELS[ex.PATTERNS[t["pattern_key"]].level],
             "module": ex.module_of(t["pattern_key"]).title,
             "solved": bool(t["solved"]),
             "attempts": t["attempts"],

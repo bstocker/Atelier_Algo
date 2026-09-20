@@ -12,6 +12,7 @@
     nav: document.getElementById("tasknav"),
     name: document.getElementById("task-name"),
     module: document.getElementById("task-module"),
+    level: document.getElementById("task-level"),
     brief: document.getElementById("task-brief"),
     state: document.getElementById("task-state"),
     target: document.getElementById("target"),
@@ -36,12 +37,17 @@
     check: document.getElementById("check-btn"),
     feedback: document.getElementById("feedback"),
     finish: document.getElementById("finish-btn"),
+    confirmBox: document.getElementById("confirm-overlay"),
+    confirmRecap: document.getElementById("confirm-recap"),
+    confirmYes: document.getElementById("confirm-yes"),
+    confirmNo: document.getElementById("confirm-no"),
     finishHint: document.getElementById("finish-hint"),
     progressPill: document.getElementById("progress-pill"),
     penaltyPill: document.getElementById("penalty-pill")
   };
 
   var tasks = [];
+  var progress = null;     // dernier état renvoyé par le serveur
   var modules = [];        // intitulés des modules couverts par la session
   var current = null;      // donnees de l'exercice affiché
   var selection = {};
@@ -71,6 +77,7 @@
   // --- Affichage ----------------------------------------------------------
 
   function showProgress(p) {
+    progress = p;
     el.progressPill.textContent = p.solved + " / " + p.total + " motifs";
     if (p.penalty > 0) {
       el.penaltyPill.hidden = false;
@@ -82,11 +89,24 @@
       + " / 20. La remise est définitive.";
   }
 
+  function levelDots(level) {
+    // Mêmes repères que côté enseignant : des points autant qu'une couleur,
+    // pour que la difficulté reste lisible en niveaux de gris.
+    var dots = document.createElement("span");
+    dots.className = "level-dots lvl" + level;
+    dots.setAttribute("aria-hidden", "true");
+    dots.textContent = "●".repeat(level) + "○".repeat(4 - level);
+    return dots;
+  }
+
   function navButton(task) {
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = (task.solved ? "✓ " : "") + task.name;
     btn.className = task.solved ? "done" : "";
+    btn.title = "Difficulté : " + task.level_name;
+    btn.appendChild(levelDots(task.level));
+    btn.appendChild(document.createTextNode(
+      (task.solved ? "✓ " : "") + task.name));
     if (current && current.key === task.key) {
       btn.setAttribute("aria-current", "true");
     }
@@ -321,6 +341,11 @@
       selection = Object.assign({}, data.selection || {});
       el.name.textContent = data.name;
       el.module.textContent = data.module;
+      el.level.className = "level-badge lvl" + data.level;
+      el.level.title = "Difficulté : " + data.level_name;
+      el.level.textContent = "";
+      el.level.appendChild(levelDots(data.level));
+      el.level.appendChild(document.createTextNode(" " + data.level_name));
       el.brief.textContent = data.brief + " — " + data.why;
       el.state.textContent = data.solved
         ? "✓ réussi" : "en cours · " + data.attempts + " tentative"
@@ -445,13 +470,35 @@
       .then(function () { el.check.disabled = false; });
   });
 
+  // Un window.confirm() natif fait perdre le focus à la page : la
+  // surveillance le comptait comme une sortie, et l'élève était pénalisé
+  // pour avoir cliqué sur « Remettre ma copie ». D'où cette boîte en page.
   el.finish.addEventListener("click", function () {
-    if (!window.confirm("Remettre votre copie ? Vous ne pourrez plus répondre.")) return;
-    el.finish.disabled = true;
+    if (progress) {
+      el.confirmRecap.textContent = progress.solved + " exercice"
+        + (progress.solved > 1 ? "s" : "") + " sur " + progress.total
+        + " · note actuelle " + progress.score.toFixed(2) + " / 20";
+    }
+    el.confirmBox.hidden = false;
+    el.confirmNo.focus();
+  });
+
+  el.confirmNo.addEventListener("click", function () {
+    el.confirmBox.hidden = true;
+    el.finish.focus();
+  });
+
+  el.confirmYes.addEventListener("click", function () {
+    el.confirmYes.disabled = true;
     postJSON("/api/finish").then(function (res) {
+      // On arrête la surveillance avant de quitter le plein écran, sinon
+      // cette sortie-là serait comptée comme une infraction.
       if (window.Proctor) window.Proctor.stop();
       window.location.href = res.redirect;
-    }).catch(function () { el.finish.disabled = false; });
+    }).catch(function () {
+      el.confirmYes.disabled = false;
+      el.confirmBox.hidden = true;
+    });
   });
 
   el.start.addEventListener("click", function () {
