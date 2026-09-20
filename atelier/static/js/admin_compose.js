@@ -26,9 +26,10 @@
     var pick = event.target.getAttribute && event.target.getAttribute("data-pick");
     if (!pick) return;
     event.preventDefault();
-    if (pick === "level" || pick === "module") {
-      var scope = event.target.closest(
-        pick === "level" ? ".level-group" : ".module");
+    if (pick === "level" || pick === "module" || pick === "chapter") {
+      var scope = event.target.closest("." + (pick === "level" ? "level-group"
+                                            : pick === "module" ? "module"
+                                            : "chapter"));
       var inScope = Array.prototype.slice.call(
         scope.querySelectorAll("input[name=patterns]"));
       // Bascule : si tout est deja coche, on decoche.

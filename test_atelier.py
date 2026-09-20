@@ -1,5 +1,6 @@
 """Tests de bout en bout : session, exercices, penalites, notation."""
 
+import itertools
 import json
 import os
 import shutil
@@ -9,6 +10,22 @@ import unittest
 from markupsafe import escape
 
 from atelier import create_app, load_env_file, exercises as ex, scoring
+
+
+def tirages(pattern):
+    """Tous les paramètres possibles d'un exercice, tirages croisés.
+
+    Les exercices n'ont pas tous une seule dimension : certains en tirent
+    plusieurs, d'autres en dérivent (une phrase, les valeurs d'un tableau).
+    """
+    specs = ex.specs(pattern)
+    noms = [nom for nom, _lo, _hi in specs]
+    for combinaison in itertools.product(*[range(lo, hi + 1)
+                                           for _n, lo, hi in specs]):
+        params = dict(zip(noms, combinaison))
+        if pattern.derive:
+            params.update(pattern.derive(params))
+        yield params
 
 
 class AtelierTest(unittest.TestCase):
@@ -452,10 +469,8 @@ class AtelierTest(unittest.TestCase):
         for key, pattern in ex.PATTERNS.items():
             if pattern.mode != "debug":
                 continue
-            name, lo, hi = pattern.dim
-            for size in range(lo, hi + 1):
-                params = {name: size}
-                with self.subTest(exercice=key, taille=size):
+            for params in tirages(pattern):
+                with self.subTest(exercice=key, params=params):
                     self.assertNotEqual(ex.target_rows(key, params),
                                         ex.broken_rows(key, params))
 
@@ -626,9 +641,19 @@ class CatalogueTest(unittest.TestCase):
             self.assertIn(module.level, ex.LEVELS, module.key)
 
     def test_catalogue_covers_every_exercise(self):
-        vus = [p.key for _module, niveaux in ex.catalogue()
-               for _lvl, _nom, motifs in niveaux for p in motifs]
+        vus = [p.key
+               for _chapitre, modules in ex.catalogue()
+               for _module, niveaux in modules
+               for _lvl, _nom, motifs in niveaux
+               for p in motifs]
         self.assertEqual(sorted(vus), sorted(ex.ALL_KEYS))
+
+    def test_every_module_belongs_to_a_chapter(self):
+        dans_chapitres = [m.key for c in ex.CHAPTERS for m in c.modules]
+        self.assertEqual(sorted(dans_chapitres),
+                         sorted(m.key for m in ex.MODULES))
+        for key in ex.ALL_KEYS:
+            self.assertIsNotNone(ex.chapter_of(key), key)
 
 
 class TraceConsistencyTest(unittest.TestCase):
@@ -638,13 +663,12 @@ class TraceConsistencyTest(unittest.TestCase):
         for key, pattern in ex.PATTERNS.items():
             if pattern.trace is None:
                 continue
-            name, lo, hi = pattern.dim
             blank_id = list(pattern.blanks)[0]
-            for size in range(lo, hi + 1):
-                params = {name: size}
+            for params in tirages(pattern):
                 for option in pattern.blanks[blank_id][1]:
                     selection = {blank_id: option.id}
-                    with self.subTest(pattern=key, taille=size, choix=option.c):
+                    with self.subTest(pattern=key, params=params,
+                                      choix=option.c):
                         steps = ex.build_trace(key, params, selection)
                         try:
                             rows = ex.build_rows(key, params, selection)
@@ -677,9 +701,7 @@ class PatternTest(unittest.TestCase):
             if pattern.mode != "complete":
                 continue    # prediction : aucun menu ; diagnostic : pas de
                             # sortie a comparer, la reponse est une cause
-            name, lo, hi = pattern.dim or pattern.value
-            for size in range(lo, hi + 1):
-                params = {name: size}
+            for params in tirages(pattern):
                 target = ex.target_rows(key, params)
                 for blank_id, (_label, options) in pattern.blanks.items():
                     for opt in options:

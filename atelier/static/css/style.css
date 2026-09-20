@@ -393,6 +393,20 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
   background: var(--warning-bg); border-left: 3px solid var(--serious);
 }
 
+/* Chapitres : le regroupement le plus large — un langage, un domaine */
+.chapter {
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  padding: 1rem 1.1rem 0.4rem; margin-bottom: 1.25rem;
+  background: var(--surface-1);
+}
+.chapter-head {
+  display: flex; justify-content: space-between; align-items: start;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;
+}
+.chapter-title { margin: 0 0 .2rem; font-size: 1.25rem; }
+.chapter-head .hint { margin: 0; max-width: 52ch; }
+.chapter .module { background: var(--surface-0); }
+
 /* Modules : le premier niveau de regroupement du catalogue */
 .module {
   border: 1px solid var(--border); border-radius: var(--radius);

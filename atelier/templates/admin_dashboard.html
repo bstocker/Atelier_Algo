@@ -26,7 +26,17 @@
         <button type="button" class="ghost" data-pick="none">Tout décocher</button>
       </p>
 
-      {% for module, niveaux in catalogue %}
+      {% for chapter, modules in catalogue %}
+      <section class="chapter" data-chapter="{{ chapter.key }}">
+        <header class="chapter-head">
+          <div>
+            <h2 class="chapter-title">{{ chapter.title }}</h2>
+            <p class="hint">{{ chapter.summary }}</p>
+          </div>
+          <button type="button" class="ghost" data-pick="chapter">Cocher ce chapitre</button>
+        </header>
+
+      {% for module, niveaux in modules %}
       <section class="module" data-module="{{ module.key }}">
         <header class="module-head">
           <div>
@@ -70,6 +80,8 @@
           </div>
         </div>
         {% endfor %}
+      </section>
+      {% endfor %}
       </section>
       {% endfor %}
     </fieldset>

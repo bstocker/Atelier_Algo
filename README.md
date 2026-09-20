@@ -150,27 +150,33 @@ Difficulté : Moyenne (~180 minutes)
 
 ### Ce que fait l'application
 
-Une épreuve surveillée sur les **boucles en C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible.
+Une épreuve surveillée sur les **bases du langage C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible.
 
-Les exercices sont organisés en **modules**. Un module porte un titre, un niveau indicatif et un résumé ; il regroupe des exercices qui gardent chacun leur propre niveau, plus fin.
+Le catalogue a trois étages : **chapitre → module → exercice**.
 
-Un seul module existe aujourd'hui — **Les boucles**, dix-huit exercices — mais la structure est prévue pour en accueillir d'autres : les conditions, les tableaux, des quiz.
+Un **chapitre** réunit des modules d'un même domaine — aujourd'hui « Langage C ». Un **module** porte un titre, un niveau indicatif et un résumé. Chaque **exercice** garde son propre niveau, plus fin, et son mode.
 
-| Niveau | Exercices du module « Les boucles » |
-| --- | --- |
-| ●○○○ Découverte | Une ligne d'étoiles, Compte à rebours |
-| ●●○○ Facile | Le pas de la boucle, La boucle while, Carré, Triangle rectangle, Triangle inversé, Bug : le triangle rectangle, Bug : la ligne d'étoiles |
-| ●●●○ Moyen | Triangle aligné à droite, Pyramide, Carré magique, Table de multiplication, Bug : les n lignes, Bug : la somme de 1 à n, Prédire : triangle aligné à droite |
-| ●●●● Avancé | Losange, Prédire : carré magique |
+**55 exercices** répartis en six modules :
 
-**Ajouter un module** tient en une entrée dans `MODULES` :
+| Module | Niveau | Exercices | Ce qu'il fait travailler |
+| --- | --- | --- | --- |
+| Les boucles | ●○○○ | 18 | Répétition, compteur, condition d'arrêt, pas, motifs imbriqués |
+| Les conditions | ●○○○ | 8 | Comparaisons, `&&` / `\|\|`, `if … else if`, `switch` |
+| Les chaînes de caractères | ●●○○ | 8 | Tableau de `char`, `'\0'`, indices, comparaison de caractères |
+| Les tableaux | ●●○○ | 8 | Parcours indexé, accumulateurs, extremums, deux boucles |
+| Les arguments | ●●○○ | 7 | `argc`, `argv`, `atoi`, et le piège de `argv[0]` |
+| Itératif et récursif | ●●●○ | 6 | Cas d'arrêt, pas, débordement de pile |
+
+**Ajouter un module** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre.
 
 ```python
-Module(key="conditions", title="Les conditions", level=2,
-       summary="…", keys=("si_simple", "si_sinon", …))
+# atelier/modules/pointeurs.py
+PATTERNS = (ADRESSE, DEREFERENCE, …)
+MODULE = Module(key="pointeurs", title="Les pointeurs", level=4,
+                summary="…", keys=tuple(p.key for p in PATTERNS))
 ```
 
-Trois tests veillent sur la cohérence : chaque exercice appartient à exactement un module, toutes les clés citées existent, et chaque module porte un titre, un résumé et un niveau connu.
+Quatre tests veillent sur la cohérence : chaque exercice appartient à exactement un module, chaque module à un chapitre, toutes les clés citées existent, et chaque module porte un titre, un résumé et un niveau connu.
 
 Trois modes coexistent :
 
@@ -342,7 +348,11 @@ atelier/
   __init__.py           Fabrique d'application et configuration
   db.py                 Connexion SQLite, une par requête
   schema.sql            Schéma (session, student, task, incident)
-  exercises.py          Moteur des 8 motifs : gabarits, menus, correction
+  engine.py             Socle du moteur : structures, fabriques, correction
+  exercises.py          Catalogue : chapitres, modules, registre
+  modules/              Un fichier par module d'exercices
+    boucles.py  conditions.py  chaines.py
+    tableaux.py  recursif.py   arguments.py
   scoring.py            Barème et table des pénalités
   student.py            Parcours étudiant et API
   admin.py              Espace enseignant, suivi direct, historique
@@ -357,7 +367,15 @@ test_atelier.py         Tests de bout en bout
 .env                    Genere par le deploiement, jamais versionne
 ```
 
-**Ajouter un motif** se fait dans `exercises.py` : un objet `Pattern` décrit son gabarit, ses menus et sa fonction `rows`. Rien d'autre à modifier.
+**Ajouter un exercice** se fait dans le fichier de son module : un objet `Pattern` décrit son gabarit, ses menus et sa fonction `rows`. Rien d'autre à modifier.
+
+Un exercice peut tirer **plusieurs paramètres** (`dims`) et en **dériver** d'autres (`derive`) — une phrase choisie dans une liste, les valeurs d'un tableau, la ligne de commande d'un programme. Le tirage reste déterministe par étudiant.
+
+### Une leçon apprise en écrivant ces modules
+
+Le test qui vérifie qu'**aucun distracteur ne reproduit la sortie attendue** a rejeté une douzaine d'exercices pendant leur écriture. Les coïncidences sont plus fréquentes qu'on ne l'imagine : pour « l'hiver sera pluvieux » il y a autant de `r` que d'espaces ; pour `{-3, 4, -2, -6, 5, 2}` la somme et la soustraction alternée valent toutes deux 0.
+
+La parade est générale : **afficher le déroulé, pas seulement le résultat**. Un accumulateur qui s'affiche à chaque tour, les positions trouvées et pas juste leur nombre, la trace de la recherche plutôt que la valeur finale. Deux chemins différents finissent parfois au même endroit ; ils n'y passent jamais de la même façon. Et l'élève y gagne : il voit où son raisonnement dévie.
 
 ### Spécifications techniques
 
@@ -424,7 +442,7 @@ PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi dire
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 61 tests
+python3 -m unittest test_atelier -v     # 62 tests
 ```
 
 ---------------------------------------------------
@@ -442,7 +460,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (61 tests).
+La suite `test_atelier.py` couvre ces points (62 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -452,8 +470,11 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 | Priorité | Évolution | Détail | Effort |
 | --- | --- | --- | --- |
-| Haute | Plus de prédictions | `predict_from` sur les autres motifs, en une poignée de lignes | S |
-| Moyenne | Plus de bugs | Boucle infinie, décalage d'indice, condition composée mal parenthésée | S |
+| Haute | Module « Les pointeurs » | Adresse, déréférencement, passage par adresse | M |
+| Haute | Module « Les fonctions » | Paramètres, valeur de retour, portée des variables | M |
+| Moyenne | Plus de prédictions | `predict_from` sur les autres exercices, cinq lignes chacune | S |
+| Moyenne | Plus de bugs | Débordement d'indice, `scanf` sans `&`, comparaison de chaînes avec `==` | S |
+| Moyenne | Un chapitre par langage | La structure le permet déjà : Python, Java… | M |
 | Moyenne | Mode Parsons | Réordonner des lignes mélangées : impossible à « générer » | M |
 | Moyenne | Trace des boucles imbriquées | Étendre l'exécution pas à pas aux motifs à deux boucles | M |
 | Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |
