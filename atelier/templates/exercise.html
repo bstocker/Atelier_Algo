@@ -31,6 +31,12 @@
       <span class="pill" id="task-state"></span>
     </header>
 
+    <!-- Rappel de cours, seulement sur les exercices qui en portent un -->
+    <aside class="lesson" id="lesson" hidden>
+      <h3>Ce qu'il faut savoir</h3>
+      <ul id="lesson-list"></ul>
+    </aside>
+
     <div class="grid2">
       <div>
         <h3>Motif à reproduire</h3>
@@ -46,6 +52,21 @@
     <pre class="code" id="code"></pre>
 
     <div id="blanks" class="blanks"></div>
+
+    <!-- Trace du choix courant, renvoyee par le serveur a la compilation -->
+    <section id="trace-box" hidden>
+      <h3>Exécution pas à pas</h3>
+      <p class="hint">Ce tableau déroule <em>votre</em> boucle, tour par tour.</p>
+      <div class="tablewrap">
+        <table class="table trace">
+          <thead>
+            <tr><th>Tour</th><th>j</th><th>Test</th><th></th>
+                <th>Action</th><th>Sortie</th></tr>
+          </thead>
+          <tbody id="trace-body"></tbody>
+        </table>
+      </div>
+    </section>
 
     <div class="actions">
       <button type="button" class="primary" id="check-btn">Compiler et exécuter</button>

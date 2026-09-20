@@ -149,7 +149,9 @@ Difficulté : Moyenne (~180 minutes)
 
 ### Ce que fait l'application
 
-Une épreuve surveillée sur les **boucles imbriquées en C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible. Huit motifs sont disponibles (carré, triangle rectangle, triangle inversé, triangle aligné à droite, losange, pyramide, carré magique, table de multiplication).
+Une épreuve surveillée sur les **boucles en C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible.
+
+Neuf exercices sont disponibles : un exercice d'entrée sur la boucle simple, puis huit motifs de boucles imbriquées.
 
 **La taille de chaque motif est tirée au hasard par étudiant** : deux voisins n'ont pas la même cible. La correction est faite **côté serveur** — le navigateur ne reçoit jamais la réponse attendue.
 
@@ -167,7 +169,27 @@ Le décompte est un rappel à l'ordre : la pénalité dépend du rang de la sort
 
 Si le navigateur refuse le plein écran, la surveillance se rabat sur la détection du changement d'onglet et l'étudiant en est informé.
 
-### Les huit motifs
+### Exercice 0 : une ligne d'étoiles
+
+Le point d'entrée, avant toute boucle imbriquée. Une seule boucle, un seul menu, une seule ligne à produire — et quatre bornes plausibles : `j < n`, `j <= n`, `j < n - 1`, `j > n`.
+
+Il se distingue des autres sur deux points :
+
+**Un rappel de cours** est affiché au-dessus de l'énoncé : les trois parties du `for`, le compteur qui part de zéro, le test évalué *avant* chaque tour.
+
+**Une trace d'exécution** apparaît après chaque compilation. Elle déroule la boucle tour par tour — valeur de `j`, test avec ses valeurs substituées, verdict, action, sortie accumulée — et se termine sur le tour où le test devient faux :
+
+| Tour | j | Test | | Action | Sortie |
+| --- | --- | --- | --- | --- | --- |
+| 6 | 5 | `5 <= 6` | ✓ vrai | `printf("*")` puis `j++` | `******` |
+| 7 | 6 | `6 <= 6` | ✓ vrai | `printf("*")` puis `j++` | `*******` |
+| — | 7 | `7 <= 6` | ✗ faux | on sort de la boucle | `*******` |
+
+Le point essentiel : **la trace déroule le choix de l'élève, pas la réponse attendue.** Une borne fausse produit une trace fausse, et l'erreur de dépassement devient visible à la ligne près, au lieu de rester un « il y a une étoile de trop ».
+
+Techniquement, un motif expose une trace en définissant `trace(params, get, text)` sur son `Pattern`. Les autres renvoient `None` et l'interface masque le tableau.
+
+### Les huit motifs imbriqués
 
 Pour la ligne `i` (à partir de 0), voici les formules attendues. L'étudiant ne les écrit pas : il les reconnaît parmi quatre propositions par menu.
 
@@ -191,10 +213,12 @@ L'enseignant choisit à la création de la session quels motifs composent l'épr
 Le cœur est un moteur piloté par des données : chaque exercice est un objet décrivant sa cible, son code à trous et sa logique de génération. Le rendu est séparé du contenu.
 
 - `name`, `brief`, `why` : libellés affichés.
+- `lesson` : rappel de cours facultatif, affiché au-dessus de l'énoncé.
 - `dim` / `value` : taille tirable (`n`, `h`) ou valeur saisie (`v`).
 - `blanks` : les menus à compléter ; chaque option porte son texte C et la fonction Python équivalente.
 - `tpl` : le gabarit de code, mélange de texte et de marqueurs de trou.
 - `rows(params, get)` : produit chaque ligne à partir des fonctions choisies ; sert à la fois à la cible (choix de référence) et à la sortie de l'élève.
+- `trace(params, get, text)` : déroulé pas à pas facultatif, pour les exercices qui enseignent le mécanisme plutôt que le motif.
 
 Une sélection est donc juste **exactement quand elle reproduit la cible** : il n'y a pas de table de bonnes réponses à maintenir en parallèle du moteur.
 
@@ -308,7 +332,7 @@ PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi dire
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 29 tests
+python3 -m unittest test_atelier -v     # 34 tests
 ```
 
 ---------------------------------------------------
@@ -326,7 +350,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (29 tests).
+La suite `test_atelier.py` couvre ces points (34 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -339,7 +363,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 | Haute | Mode « prédire la sortie » | Donner le code rempli, l'élève écrit le motif obtenu | M |
 | Haute | Mode « trouver le bug » | Borne exclue, boucle infinie, condition inversée, réinitialisation dans la boucle | M |
 | Moyenne | Mode Parsons | Réordonner des lignes mélangées : impossible à « générer » | M |
-| Moyenne | Exécution pas à pas | Voir variables et sortie évoluer tour par tour, à la révélation | M |
+| Moyenne | Trace des boucles imbriquées | Étendre l'exécution pas à pas aux motifs à deux boucles | M |
 | Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |
 | Moyenne | Version Python d'initiation | Boucles simples : `for`, `while`, accumulateur, compteur | M |
 | Basse | Boucles imbriquées libres | Motifs personnalisés pour élèves avancés | M |
@@ -347,7 +371,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le moteur est déjà séparé du contenu.
 
-*Déjà livré depuis la fiche initiale :* identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores.
+*Déjà livré depuis la fiche initiale :* identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas.
 
 ---------------------------------------------------
 ⚠️ Contraintes, risques et limites connues

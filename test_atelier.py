@@ -243,6 +243,44 @@ class AtelierTest(unittest.TestCase):
         self.assertEqual(sum(s["solved"] for s in live["students"]), 3)
         self.assertEqual(live["stats"]["average"], 6.0)   # 3 x 10 / 5
 
+    def test_intro_exercise_comes_first_and_carries_a_lesson(self):
+        self.assertEqual(ex.ALL_KEYS[0], "ligne")
+        _, code = self.make_session(patterns=("ligne",))
+        client, _ = self.join(code)
+        task = client.get("/api/task/ligne").get_json()
+        self.assertTrue(task["lesson"])
+        self.assertEqual(len(task["target"]), 1)   # une seule ligne
+
+    def test_trace_follows_the_student_choice_not_the_answer(self):
+        _, code = self.make_session(patterns=("ligne",))
+        client, _ = self.join(code)
+        n = client.get("/api/task/ligne").get_json()["params"]["n"]
+
+        # `j <= n` : un tour de trop, l'erreur de borne classique.
+        res = client.post("/api/task/ligne/check",
+                          json={"selection": {"etoiles": "b"}}).get_json()
+        self.assertFalse(res["ok"])
+        steps = res["trace"]
+        self.assertEqual(len(steps), n + 2)          # n+1 tours, puis la sortie
+        self.assertTrue(all(s["vrai"] for s in steps[:-1]))
+        self.assertFalse(steps[-1]["vrai"])
+        self.assertEqual(steps[-2]["sortie"], "*" * (n + 1))
+        # Le test est affiche avec ses valeurs, pas sous forme abstraite.
+        self.assertEqual(steps[0]["test"], "0 <= %d" % n)
+
+        res = client.post("/api/task/ligne/check",
+                          json={"selection": {"etoiles": "a"}}).get_json()
+        self.assertTrue(res["ok"])
+        self.assertEqual(len(res["trace"]), n + 1)
+        self.assertEqual(res["trace"][-1]["test"], "%d < %d" % (n, n))
+
+    def test_patterns_without_a_trace_return_none(self):
+        _, code = self.make_session(patterns=("carre",))
+        client, _ = self.join(code)
+        res = client.post("/api/task/carre/check",
+                          json={"selection": {"stars": "a"}}).get_json()
+        self.assertIsNone(res["trace"])
+
     def test_unknown_pattern_is_404(self):
         _, code = self.make_session(patterns=("carre",))
         client, _ = self.join(code)
@@ -330,6 +368,16 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(scoring.final_score(0, 8, 0), 0.0)
         self.assertEqual(scoring.final_score(4, 8, 20), 0.0)
         self.assertEqual(scoring.final_score(0, 0, 0), 0.0)
+
+
+class SubstituteTest(unittest.TestCase):
+
+    def test_variables_are_replaced_by_their_values(self):
+        self.assertEqual(ex.substitute("j < n", {"j": 2, "n": 5}), "2 < 5")
+        self.assertEqual(ex.substitute("j < n - 1", {"j": 4, "n": 5}), "4 < 5 - 1")
+
+    def test_unknown_names_are_left_alone(self):
+        self.assertEqual(ex.substitute("j <= h", {"j": 1}), "1 <= h")
 
 
 class PatternTest(unittest.TestCase):

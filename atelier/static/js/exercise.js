@@ -17,6 +17,10 @@
     output: document.getElementById("output"),
     code: document.getElementById("code"),
     blanks: document.getElementById("blanks"),
+    lesson: document.getElementById("lesson"),
+    lessonList: document.getElementById("lesson-list"),
+    traceBox: document.getElementById("trace-box"),
+    traceBody: document.getElementById("trace-body"),
     check: document.getElementById("check-btn"),
     feedback: document.getElementById("feedback"),
     finish: document.getElementById("finish-btn"),
@@ -139,6 +143,75 @@
     });
   }
 
+  // Les rappels de cours acceptent `du code` et **du gras**, rien de plus :
+  // le texte vient du serveur, on le pose en textContent et on n'insere que
+  // des balises que l'on fabrique soi-meme.
+  function richText(node, text) {
+    var re = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+    var last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) {
+        node.appendChild(document.createTextNode(text.slice(last, m.index)));
+      }
+      var inner = m[0].slice(m[0][0] === "`" ? 1 : 2,
+                             m[0][0] === "`" ? -1 : -2);
+      var tag = document.createElement(m[0][0] === "`" ? "code" : "strong");
+      tag.textContent = inner;
+      node.appendChild(tag);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) {
+      node.appendChild(document.createTextNode(text.slice(last)));
+    }
+  }
+
+  function renderLesson(lines) {
+    el.lessonList.textContent = "";
+    if (!lines || !lines.length) { el.lesson.hidden = true; return; }
+    lines.forEach(function (line) {
+      var li = document.createElement("li");
+      richText(li, line);
+      el.lessonList.appendChild(li);
+    });
+    el.lesson.hidden = false;
+  }
+
+  function renderTrace(steps) {
+    el.traceBody.textContent = "";
+    if (!steps || !steps.length) { el.traceBox.hidden = true; return; }
+    steps.forEach(function (step) {
+      var tr = document.createElement("tr");
+      if (!step.vrai) tr.className = "exit";
+
+      [String(step.tour === null ? "—" : step.tour),
+       String(step.j),
+       step.test].forEach(function (value, idx) {
+        var td = document.createElement("td");
+        td.textContent = value;
+        td.className = idx === 2 ? "mono" : "num";
+        tr.appendChild(td);
+      });
+
+      var verdict = document.createElement("td");
+      // Glyphe et mot : le statut ne repose jamais sur la couleur seule.
+      verdict.className = step.vrai ? "ok" : "ko";
+      verdict.textContent = step.vrai ? "\u2713 vrai" : "\u2717 faux";
+      tr.appendChild(verdict);
+
+      var action = document.createElement("td");
+      action.textContent = step.action;
+      tr.appendChild(action);
+
+      var out = document.createElement("td");
+      out.className = "mono";
+      out.textContent = step.sortie === "" ? "(vide)" : step.sortie;
+      tr.appendChild(out);
+
+      el.traceBody.appendChild(tr);
+    });
+    el.traceBox.hidden = false;
+  }
+
   function loadTask(key) {
     return api("/api/task/" + encodeURIComponent(key)).then(function (data) {
       current = data;
@@ -153,6 +226,8 @@
       el.output.textContent = "Complétez les menus puis compilez.";
       el.feedback.textContent = "";
       el.feedback.className = "feedback";
+      renderLesson(data.lesson);
+      renderTrace(null);
       renderBlanks();
       renderCode();
       renderNav();
@@ -168,12 +243,14 @@
              { selection: selection })
       .then(function (res) {
         if (!res.complete) {
+          renderTrace(null);
           el.feedback.textContent = res.message;
           el.feedback.className = "feedback ko";
           return;
         }
         var marks = res.diff.map(function (d) { return d.ok; });
         renderLines(el.output, res.diff.map(function (d) { return d.got; }), marks);
+        renderTrace(res.trace);
         if (res.ok) {
           el.feedback.textContent = res.first_time
             ? "Exact. Motif validé."

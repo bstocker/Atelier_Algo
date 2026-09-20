@@ -9,9 +9,10 @@ Tout est evalue cote serveur : le navigateur ne recoit jamais la
 reponse attendue, seulement le motif a obtenir.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 import random
+import re
 
 BLANK_PLACEHOLDER = "__________"
 
@@ -35,10 +36,103 @@ class Pattern:
     rows: Callable                        # (params, get) -> list[str]
     dim: tuple = None                     # (nom, mini, maxi) tire au hasard
     value: tuple = None                   # (nom, mini, maxi) saisi au clavier
+    trace: Callable = None                # (params, get, text) -> list[dict]
+    lesson: tuple = ()                    # points a retenir, affiches en tete
 
 
 def _opts(*triples):
     return [Option(oid, c, fn) for oid, c, fn in triples]
+
+
+_VARS = re.compile(r"\b([a-zA-Z]+)\b")
+
+
+def substitute(expression, values):
+    """Remplace les variables d'une expression C par leurs valeurs.
+
+    `j < n` avec j = 2 et n = 5 devient `2 < 5`. Sert a la trace : l'eleve
+    voit le test tel qu'il est evalue a chaque tour, pas sa forme abstraite.
+    """
+    return _VARS.sub(
+        lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(1),
+        expression,
+    )
+
+
+# --------------------------------------------------------------------------
+# 0. Une ligne d'etoiles — l'exercice d'entree
+# --------------------------------------------------------------------------
+
+def _ligne_trace(p, get, text):
+    """Deroule la boucle tour par tour, pour la selection courante.
+
+    C'est la trace de ce que fait l'eleve, pas celle de la bonne reponse :
+    une condition fausse produit une trace fausse, et c'est precisement la
+    qu'on voit pourquoi.
+    """
+    n = p["n"]
+    condition = text("etoiles")
+    tours = min(get("etoiles")({"n": n}), 40)   # garde-fou d'affichage
+
+    steps, sortie = [], ""
+    for j in range(tours):
+        sortie += "*"
+        steps.append({
+            "tour": j + 1,
+            "j": j,
+            "test": substitute(condition, {"j": j, "n": n}),
+            "vrai": True,
+            "action": 'printf("*")  puis  j++',
+            "sortie": sortie,
+        })
+    steps.append({
+        "tour": None,
+        "j": tours,
+        "test": substitute(condition, {"j": tours, "n": n}),
+        "vrai": False,
+        "action": "le test est faux : on sort de la boucle",
+        "sortie": sortie,
+    })
+    return steps
+
+
+LIGNE = Pattern(
+    key="ligne",
+    name="Une ligne d'étoiles",
+    brief="Afficher exactement n étoiles, sur une seule ligne.",
+    why="Une boucle répète une action. Tout le reste en découle.",
+    lesson=(
+        "Une boucle `for` tient en trois parties : `for (départ ; test ; pas)`.",
+        "`int j = 0` : le compteur démarre à zéro.",
+        "`j++` : il avance d'un à chaque tour.",
+        "Le test est évalué **avant** chaque tour. Dès qu'il est faux, "
+        "la boucle s'arrête.",
+        "Le compteur part de 0, donc pour n tours il doit s'arrêter "
+        "**avant** d'atteindre n.",
+    ),
+    dim=("n", 3, 9),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    for (int j = 0; @etoiles@; j++) {
+        printf("*");
+    }
+    printf("\\n");
+    return 0;
+}""",
+    blanks={
+        "etoiles": ("Condition d'arrêt de la boucle", _opts(
+            ("a", "j < n", lambda c: c["n"]),
+            ("b", "j <= n", lambda c: c["n"] + 1),
+            ("c", "j < n - 1", lambda c: c["n"] - 1),
+            ("d", "j > n", lambda c: 0),
+        )),
+    },
+    ref={"etoiles": "a"},
+    rows=lambda p, get: ["*" * get("etoiles")({"n": p["n"]})],
+    trace=_ligne_trace,
+)
 
 
 # --------------------------------------------------------------------------
@@ -412,7 +506,7 @@ int main(void) {
 
 PATTERNS = {
     p.key: p
-    for p in (CARRE, TRIANGLE_RECT, TRIANGLE_INV, TRIANGLE_DROITE,
+    for p in (LIGNE, CARRE, TRIANGLE_RECT, TRIANGLE_INV, TRIANGLE_DROITE,
               LOSANGE, PYRAMIDE, CARRE_MAGIQUE, TABLE)
 }
 
@@ -442,6 +536,25 @@ def _getter(pattern, selection):
                 return opt.fn
         raise KeyError(blank_id)
     return get
+
+
+def _texter(pattern, selection):
+    """Rend une fonction blank_id -> texte C du choix courant."""
+    def text(blank_id):
+        for opt in pattern.blanks[blank_id][1]:
+            if opt.id == selection.get(blank_id):
+                return opt.c
+        raise KeyError(blank_id)
+    return text
+
+
+def build_trace(key, params, selection):
+    """Deroule pas a pas, ou None si le motif n'expose pas de trace."""
+    pattern = PATTERNS[key]
+    if pattern.trace is None:
+        return None
+    return pattern.trace(params, _getter(pattern, selection),
+                         _texter(pattern, selection))
 
 
 def build_rows(key, params, selection):

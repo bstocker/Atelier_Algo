@@ -226,6 +226,7 @@ def api_task(key):
         "brief": pattern.brief,
         "why": pattern.why,
         "params": params,
+        "lesson": list(pattern.lesson),
         "target": ex.target_rows(key, params),
         "code": ex.render_code(key, params, selection),
         "code_template": ex.code_template(key, params),
@@ -269,6 +270,9 @@ def api_check(key):
 
     produced = ex.build_rows(key, params, selection)
     ok, diff = ex.compare(produced, ex.target_rows(key, params))
+    # La trace deroule le choix de l'eleve, pas la reponse attendue : une
+    # condition fausse produit une trace fausse, et c'est la qu'on la voit.
+    trace = ex.build_trace(key, params, selection)
 
     already = bool(task["solved"])
     execute("UPDATE task SET attempts = attempts + 1 WHERE id = ?", (task["id"],))
@@ -283,6 +287,7 @@ def api_check(key):
         "ok": ok,
         "rows": produced,
         "diff": diff,
+        "trace": trace,
         "code": ex.render_code(key, params, selection),
         "first_time": ok and not already,
         "progress": progress_of(student),
