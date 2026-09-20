@@ -194,6 +194,8 @@ L'épreuve s'ouvre en plein écran. Une « sortie » est tout passage hors de l'
 
 Le décompte est un rappel à l'ordre : la pénalité dépend du rang de la sortie, pas du délai de retour. Ce délai est néanmoins enregistré et visible par l'enseignant.
 
+⚠️ **Aucune boîte de dialogue native dans la page d'épreuve.** Un `window.confirm()` fait perdre le focus à la page : la surveillance le comptait comme une sortie, et l'élève était pénalisé pour avoir simplement cliqué sur « Remettre ma copie ». La confirmation de remise est donc une boîte dessinée dans la page. Un test refuse tout `confirm`, `alert` ou `prompt` dans `exercise.js`.
+
 Si le navigateur refuse le plein écran, la surveillance se rabat sur la détection du changement d'onglet et l'étudiant en est informé.
 
 ### Les exercices d'entrée
@@ -306,6 +308,12 @@ flowchart LR
 
 La comparaison se fait ligne à ligne, après suppression des espaces de fin, et surligne les écarts.
 
+### La difficulté, visible des deux côtés
+
+Chaque exercice porte son niveau, signalé **par des points autant que par la couleur** — `●○○○` à `●●●●` — pour rester lisible en niveaux de gris et pour un daltonien.
+
+L'élève les voit sur les boutons de navigation et à côté du titre de l'exercice courant ; l'enseignant, dans le formulaire de composition. Mêmes repères, mêmes teintes.
+
 ### Barème
 
 `note = 20 × (motifs réussis / motifs de la session) − pénalités`, bornée à l'intervalle [0, 20]. Les motifs pèsent tous le même poids ; le nombre de tentatives n'entre pas dans la note, mais il est affiché à l'enseignant.
@@ -394,6 +402,12 @@ python3 outils/logo.py
 
 L'ensemble des visuels pèse 49 Ko.
 
+### Le suivi direct
+
+La grille place le nom, puis **les sorties de fenêtre en deuxième colonne** : c'est ce que l'enseignant surveille en priorité pendant l'épreuve. Viennent ensuite un jeton par exercice, les réussites, la pénalité, la note et l'état.
+
+Le nom lui-même change de couleur : **orange à la première sortie, rouge à partir de la deuxième**. Les teintes sont choisies pour du texte, pas pour des marques — 4,9:1 et 5,7:1 sur la surface claire, 8,4:1 et 8,0:1 sur la sombre, au-dessus du seuil AA. Le compte figurant juste à côté, la couleur n'est jamais le seul canal.
+
 ### Pourquoi une interrogation périodique et pas de WebSocket
 
 PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi direct interroge donc `/admin/api/sessions/<id>/live` toutes les 3 secondes. La charge reste faible : une requête par enseignant connecté, pas par étudiant.
@@ -404,7 +418,7 @@ PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi dire
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 59 tests
+python3 -m unittest test_atelier -v     # 61 tests
 ```
 
 ---------------------------------------------------
@@ -422,7 +436,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (59 tests).
+La suite `test_atelier.py` couvre ces points (61 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
