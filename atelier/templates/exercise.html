@@ -39,11 +39,11 @@
 
     <div class="grid2" id="panes">
       <div id="target-pane">
-        <h3>Motif à reproduire</h3>
+        <h3 id="target-title">Motif à reproduire</h3>
         <pre class="ascii" id="target"></pre>
       </div>
       <div>
-        <h3>Votre sortie</h3>
+        <h3 id="output-title">Votre sortie</h3>
         <pre class="ascii" id="output"><span class="muted">Complétez les menus puis compilez.</span></pre>
       </div>
     </div>
@@ -52,6 +52,13 @@
     <pre class="code" id="code"></pre>
 
     <div id="blanks" class="blanks"></div>
+
+    <!-- Mode « trouver le bug » : des phrases, donc des boutons radio -->
+    <fieldset id="diag-box" hidden>
+      <legend id="diag-legend">Quelle est la cause de l'écart ?</legend>
+      <div id="diag-list" class="diagnoses"></div>
+      <p class="note" id="diag-note" hidden></p>
+    </fieldset>
 
     <!-- Mode « prédire la sortie » : aucun menu, l'élève écrit le résultat -->
     <div id="predict-box" hidden>

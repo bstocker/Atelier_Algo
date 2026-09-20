@@ -22,6 +22,12 @@
     codeTitle: document.getElementById("code-title"),
     predictBox: document.getElementById("predict-box"),
     predictInput: document.getElementById("predict-input"),
+    targetTitle: document.getElementById("target-title"),
+    outputTitle: document.getElementById("output-title"),
+    diagBox: document.getElementById("diag-box"),
+    diagLegend: document.getElementById("diag-legend"),
+    diagList: document.getElementById("diag-list"),
+    diagNote: document.getElementById("diag-note"),
     lesson: document.getElementById("lesson"),
     lessonList: document.getElementById("lesson-list"),
     traceBox: document.getElementById("trace-box"),
@@ -217,18 +223,57 @@
     el.traceBox.hidden = false;
   }
 
+  function renderDiagnoses(blank) {
+    el.diagList.textContent = "";
+    el.diagLegend.textContent = blank.label;
+    blank.options.forEach(function (opt) {
+      var label = document.createElement("label");
+      label.className = "diagnosis";
+
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "cause";
+      input.value = opt.id;
+      input.checked = selection.cause === opt.id;
+      input.addEventListener("change", function () {
+        selection = { cause: opt.id };
+        el.diagNote.hidden = true;
+        el.feedback.textContent = "";
+        el.feedback.className = "feedback";
+      });
+
+      var text = document.createElement("span");
+      richText(text, opt.c);        // les diagnostics citent du code
+
+      label.appendChild(input);
+      label.appendChild(text);
+      el.diagList.appendChild(label);
+    });
+  }
+
   function applyMode(data) {
     var predict = data.mode === "predict";
+    var debug = data.mode === "debug";
 
     el.predictBox.hidden = !predict;
-    el.blanks.hidden = predict;
+    el.diagBox.hidden = !debug;
+    el.blanks.hidden = predict || debug;
+    el.diagNote.hidden = true;
+
     // La cible EST la réponse en mode prédiction : son volet ne réapparaît
     // qu'une fois l'exercice trouvé.
     el.targetPane.hidden = predict && !data.target;
     el.panes.classList.toggle("single", predict && !data.target);
-    el.codeTitle.textContent = predict ? "Code à lire" : "Code à compléter";
+
+    el.codeTitle.textContent = (predict || debug) ? "Code à lire"
+                                                  : "Code à compléter";
     el.check.textContent = predict ? "Vérifier ma prédiction"
+                         : debug   ? "Valider mon diagnostic"
                                    : "Compiler et exécuter";
+    el.targetTitle.textContent = debug ? "Ce que le code devrait produire"
+                                       : "Motif à reproduire";
+    el.outputTitle.textContent = debug ? "Ce qu'il produit réellement"
+                                       : "Votre sortie";
     el.output.textContent = predict
       ? "Écrivez votre prédiction puis vérifiez."
       : "Complétez les menus puis compilez.";
@@ -237,6 +282,13 @@
       el.predictInput.value = data.answer || "";
       el.predictInput.readOnly = !!data.solved;
       el.code.textContent = data.code;
+    }
+    if (debug) {
+      el.code.textContent = data.code;
+      // L'écart est visible d'emblée : c'est l'expliquer qui fait l'exercice.
+      renderLines(el.output, data.actual,
+                  data.actual.map(function () { return false; }));
+      renderDiagnoses(data.blanks[0]);
     }
   }
 
@@ -257,7 +309,7 @@
       if (data.target) renderLines(el.target, data.target);
       renderLesson(data.lesson);
       renderTrace(null);
-      if (data.mode !== "predict") {
+      if (data.mode === "complete") {
         renderBlanks();
         renderCode();
       }
@@ -281,6 +333,12 @@
     var body = current.mode === "predict"
       ? { answer: el.predictInput.value }
       : { selection: selection };
+    if (current.mode === "debug" && !selection.cause) {
+      el.feedback.textContent = "Choisissez une cause.";
+      el.feedback.className = "feedback ko";
+      el.check.disabled = false;
+      return;
+    }
     postJSON("/api/task/" + encodeURIComponent(current.key) + "/check", body)
       .then(function (res) {
         if (!res.complete) {
@@ -289,6 +347,29 @@
           el.feedback.className = "feedback ko";
           return;
         }
+        if (current.mode === "debug") {
+          el.diagNote.textContent = res.note;
+          el.diagNote.className = res.ok ? "note ok-note" : "note ko-note";
+          el.diagNote.hidden = false;
+          if (res.ok) {
+            el.feedback.textContent = res.first_time
+              ? "Diagnostic exact." : "Diagnostic exact (déjà validé).";
+            el.feedback.className = "feedback ok";
+            el.state.textContent = "\u2713 réussi";
+            el.state.className = "pill ok";
+            tasks.forEach(function (t) {
+              if (t.key === current.key) t.solved = true;
+            });
+            renderNav();
+          } else {
+            current.attempts += 1;
+            el.feedback.textContent = "Ce n'est pas la cause.";
+            el.feedback.className = "feedback ko";
+          }
+          showProgress(res.progress);
+          return;
+        }
+
         if (res.infinite) {
           el.output.textContent = "Cette boucle ne s'arrête jamais : "
             + "aucune sortie à comparer.";

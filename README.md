@@ -152,16 +152,22 @@ Difficulté : Moyenne (~180 minutes)
 
 Une épreuve surveillée sur les **boucles en C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible.
 
-Quatorze exercices sont disponibles, répartis en **quatre niveaux de difficulté** que l'enseignant voit au moment de composer sa session.
+Dix-huit exercices sont disponibles, répartis en **quatre niveaux de difficulté** que l'enseignant voit au moment de composer sa session.
 
 | Niveau | Exercices |
 | --- | --- |
 | ●○○○ Découverte | Une ligne d'étoiles, Compte à rebours |
-| ●●○○ Facile | Le pas de la boucle, La boucle while, Carré, Triangle rectangle, Triangle inversé |
-| ●●●○ Moyen | Triangle aligné à droite, Pyramide, Carré magique, Table de multiplication, Prédire : triangle aligné à droite |
+| ●●○○ Facile | Le pas de la boucle, La boucle while, Carré, Triangle rectangle, Triangle inversé, Bug : la borne exclue, Bug : la comparaison inversée |
+| ●●●○ Moyen | Triangle aligné à droite, Pyramide, Carré magique, Table de multiplication, Bug : les accolades manquantes, Bug : l'accumulateur réinitialisé, Prédire : triangle aligné à droite |
 | ●●●● Avancé | Losange, Prédire : carré magique |
 
-Deux modes coexistent. En mode **compléter**, l'élève choisit les conditions de boucle dans des menus. En mode **prédire**, le code lui est donné entier et il écrit la sortie attendue.
+Trois modes coexistent :
+
+| Mode | Ce que fait l'élève | Levier anti-IA |
+| --- | --- | --- |
+| **Compléter** (12) | Choisit les conditions de boucle dans des menus | Un menu déroulant ne se colle pas dans une IA |
+| **Prédire** (2) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
+| **Trouver le bug** (4) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
 
 **La taille de chaque motif est tirée au hasard par étudiant** : deux voisins n'ont pas la même cible. La correction est faite **côté serveur** — le navigateur ne reçoit jamais la réponse attendue.
 
@@ -222,6 +228,23 @@ Les espaces de début comptent, ceux de fin sont ignorés, et les lignes vides f
 
 `predict_from()` dérive un exercice de prédiction à partir de n'importe quel motif existant : il remplit les trous avec la sélection de référence et bascule le mode. Ajouter une prédiction sur un nouveau motif tient en cinq lignes.
 
+### Le mode « trouver le bug »
+
+Un code fautif, la sortie qu'il **devrait** produire, celle qu'il produit **réellement**, et quatre causes possibles. L'écart est sous les yeux : ce qui fait l'exercice, c'est de l'expliquer.
+
+| Exercice | Le défaut | Ce qu'on observe |
+| --- | --- | --- |
+| La borne exclue | `j < i` au lieu de `j <= i` | Première ligne vide, une étoile manque partout |
+| La comparaison inversée | `j > n` au lieu de `j < n` | Rien du tout : le test est faux dès le premier passage |
+| Les accolades manquantes | Deux instructions indentées, une seule dans la boucle | Toutes les étoiles sur une seule ligne |
+| L'accumulateur réinitialisé | `total = 0` **dans** la boucle | Le résultat vaut le dernier terme, pas la somme |
+
+Chaque cause porte sa propre explication, affichée après le choix — y compris les mauvaises. Choisir « la condition devrait être `i <= n` » sur les accolades manquantes répond : *« Non : le nombre d'étoiles est correct. C'est leur répartition en lignes qui ne l'est pas. »* Le retour est donc utile même quand l'élève se trompe.
+
+Les diagnostics sont des phrases, pas du code : ils s'affichent en boutons radio, et leur ordre est mélangé par étudiant. Deux tests vérifient que chaque exercice présente bien un écart visible à **toutes** les tailles tirables, et que chaque option porte une explication.
+
+`debug_pattern()` construit un tel exercice à partir de son gabarit fautif, d'une fonction pour la sortie attendue, d'une autre pour la sortie obtenue, et des quatre diagnostics.
+
 ### Les huit motifs imbriqués
 
 Pour la ligne `i` (à partir de 0), voici les formules attendues. L'étudiant ne les écrit pas : il les reconnaît parmi quatre propositions par menu.
@@ -251,6 +274,7 @@ Le cœur est un moteur piloté par des données : chaque exercice est un objet d
 - `blanks` : les menus à compléter ; chaque option porte son texte C et la fonction Python équivalente.
 - `tpl` : le gabarit de code, mélange de texte et de marqueurs de trou.
 - `rows(params, get)` : produit chaque ligne à partir des fonctions choisies ; sert à la fois à la cible (choix de référence) et à la sortie de l'élève.
+- `broken(params)` : en mode diagnostic, la sortie que produit réellement le code fautif.
 - `trace(params, get, text)` : déroulé pas à pas facultatif, pour les exercices qui enseignent le mécanisme plutôt que le motif.
 
 Une sélection est donc juste **exactement quand elle reproduit la cible** : il n'y a pas de table de bonnes réponses à maintenir en parallèle du moteur.
@@ -366,7 +390,7 @@ PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi dire
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 45 tests
+python3 -m unittest test_atelier -v     # 50 tests
 ```
 
 ---------------------------------------------------
@@ -384,7 +408,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (45 tests).
+La suite `test_atelier.py` couvre ces points (50 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -394,8 +418,8 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 | Priorité | Évolution | Détail | Effort |
 | --- | --- | --- | --- |
-| Haute | Mode « trouver le bug » | Désigner la cause d'une sortie erronée parmi quatre | M |
-| Moyenne | Plus de prédictions | `predict_from` sur les autres motifs, en une poignée de lignes | S |
+| Haute | Plus de prédictions | `predict_from` sur les autres motifs, en une poignée de lignes | S |
+| Moyenne | Plus de bugs | Boucle infinie, décalage d'indice, condition composée mal parenthésée | S |
 | Moyenne | Mode Parsons | Réordonner des lignes mélangées : impossible à « générer » | M |
 | Moyenne | Trace des boucles imbriquées | Étendre l'exécution pas à pas aux motifs à deux boucles | M |
 | Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |
@@ -405,7 +429,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le moteur est déjà séparé du contenu.
 
-*Déjà livré depuis la fiche initiale :* mode « prédire la sortie », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas.
+*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas.
 
 ---------------------------------------------------
 ⚠️ Contraintes, risques et limites connues

@@ -36,8 +36,9 @@ def _never_ends(_ctx):
 @dataclass(frozen=True)
 class Option:
     id: str
-    c: str            # texte affiche dans le menu et injecte dans le code
-    fn: Callable      # semantique : nombre d'iterations, predicat ou valeur
+    c: str                  # texte affiche, et injecte dans le code si trou
+    fn: Callable = None     # semantique : nombre d'iterations, predicat, valeur
+    note: str = ""          # retour affiche apres coup, en mode diagnostic
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,17 @@ class Pattern:
     trace: Callable = None                # (params, get, text) -> list[dict]
     lesson: tuple = ()                    # points a retenir, affiches en tete
     level: int = 2                        # cle de LEVELS
-    mode: str = "complete"                # complete | predict
+    mode: str = "complete"                # complete | predict | debug
+    broken: Callable = None               # mode debug : la sortie erronee
 
 
 def _opts(*triples):
     return [Option(oid, c, fn) for oid, c, fn in triples]
+
+
+def _diag(*triples):
+    """Diagnostics d'un exercice « trouver le bug » : texte + explication."""
+    return [Option(oid, texte, None, note) for oid, texte, note in triples]
 
 
 _VARS = re.compile(r"\b([a-zA-Z]+)\b")
@@ -728,6 +735,191 @@ int main(void) {
 
 
 # --------------------------------------------------------------------------
+# Mode « trouver le bug »
+# --------------------------------------------------------------------------
+
+def debug_pattern(key, name, why, tpl, dim, attendu, obtenu, diagnostics,
+                  bonne, level):
+    """Exercice de diagnostic : un code fautif, sa sortie, et quatre causes.
+
+    Rien n'est cache ici — l'eleve voit ce qui etait attendu et ce qui sort.
+    La difficulte est d'expliquer l'ecart, pas de le constater.
+    """
+    return Pattern(
+        key=key,
+        name=name,
+        brief="Ce code ne produit pas ce qu'il devrait. Trouvez pourquoi.",
+        why=why,
+        lesson=(
+            "Comparez les deux sorties **ligne à ligne** : l'écart vous dit "
+            "où regarder.",
+            "Une seule des quatre causes proposées explique l'écart observé.",
+        ),
+        tpl=tpl,
+        blanks={"cause": ("Quelle est la cause de l'écart ?",
+                          _diag(*diagnostics))},
+        ref={"cause": bonne},
+        rows=lambda params, _get: attendu(params),
+        broken=obtenu,
+        dim=dim,
+        level=level,
+        mode="debug",
+    )
+
+
+BUG_BORNE = debug_pattern(
+    key="bug_borne",
+    name="Bug : la borne exclue",
+    why="Une erreur d'un rang sur la borne décale tout le motif.",
+    dim=("n", 4, 7),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < i; j++) {
+            printf("*");
+        }
+        printf("\\n");
+    }
+    return 0;
+}""",
+    attendu=lambda p: ["*" * (i + 1) for i in range(p["n"])],
+    obtenu=lambda p: ["*" * i for i in range(p["n"])],
+    diagnostics=(
+        ("a", "La boucle des étoiles s'arrête un tour trop tôt : "
+              "`j < i` exclut la valeur `i`.",
+         "Exact. Pour la ligne i, il faut i+1 étoiles, donc `j <= i` "
+         "ou `j < i + 1`. La première ligne vide est le signe le plus net."),
+        ("b", "La boucle des lignes s'arrête un tour trop tôt.",
+         "Non : le nombre de lignes est bon. C'est leur contenu qui est "
+         "décalé, ligne après ligne."),
+        ("c", "Le `printf(\"\\n\")` est mal placé.",
+         "Non : chaque ligne est bien terminée, le motif a le bon nombre "
+         "de lignes. Le problème est le nombre d'étoiles."),
+        ("d", "Le compteur `i` devrait partir de 1.",
+         "Tentant, mais alors la boucle ferait une ligne de moins. "
+         "Regardez plutôt la condition de la boucle interne."),
+    ),
+    bonne="a",
+    level=2,
+)
+
+
+BUG_INVERSE = debug_pattern(
+    key="bug_inverse",
+    name="Bug : la comparaison inversée",
+    why="Un test faux dès le départ ne donne pas une erreur, mais rien du tout.",
+    dim=("n", 4, 8),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    for (int j = 0; j > n; j++) {
+        printf("*");
+    }
+    printf("\\n");
+    return 0;
+}""",
+    attendu=lambda p: ["*" * p["n"]],
+    obtenu=lambda p: [""],
+    diagnostics=(
+        ("a", "La comparaison est dans le mauvais sens : `j > n` est faux "
+              "dès le premier test, la boucle ne s'exécute jamais.",
+         "Exact. Le test est évalué avant le premier tour : `0 > n` est faux, "
+         "le corps n'est jamais atteint. D'où une ligne vide."),
+        ("b", "Il manque le `printf(\"\\n\")` à la fin.",
+         "Non : il est bien là, et c'est même lui qui produit la ligne vide "
+         "que vous observez."),
+        ("c", "`j` devrait partir de `n` au lieu de 0.",
+         "Non : avec `j = n`, le test `j > n` serait encore faux. "
+         "Le sens de la comparaison est en cause, pas le départ."),
+        ("d", "La boucle s'arrête un tour trop tôt.",
+         "Non : elle ne s'exécute pas du tout. Aucune étoile n'est imprimée, "
+         "pas même une."),
+    ),
+    bonne="a",
+    level=2,
+)
+
+
+BUG_ACCOLADES = debug_pattern(
+    key="bug_accolades",
+    name="Bug : les accolades manquantes",
+    why="L'indentation ne dit rien au compilateur. Seules les accolades comptent.",
+    dim=("n", 3, 6),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    for (int i = 0; i < n; i++)
+        printf("*");
+        printf("\\n");
+    return 0;
+}""",
+    attendu=lambda p: ["*"] * p["n"],
+    obtenu=lambda p: ["*" * p["n"]],
+    diagnostics=(
+        ("a", "Sans accolades, la boucle ne répète que la première "
+              "instruction : le retour à la ligne est hors de la boucle.",
+         "Exact. L'indentation suggère deux instructions dans la boucle, "
+         "mais le compilateur n'en voit qu'une. Les n étoiles sortent donc "
+         "d'affilée, suivies d'un seul retour à la ligne."),
+        ("b", "Il manque un `\\n` dans le premier `printf`.",
+         "Non : l'ajouter donnerait le bon résultat par accident, mais "
+         "la cause reste que le second printf n'est pas dans la boucle."),
+        ("c", "La condition devrait être `i <= n`.",
+         "Non : le nombre d'étoiles est correct. C'est leur répartition "
+         "en lignes qui ne l'est pas."),
+        ("d", "Les deux `printf` sont dans le mauvais ordre.",
+         "Non : les inverser donnerait un retour à la ligne avant les "
+         "étoiles, pas n lignes d'une étoile."),
+    ),
+    bonne="a",
+    level=3,
+)
+
+
+BUG_REINIT = debug_pattern(
+    key="bug_reinit",
+    name="Bug : l'accumulateur réinitialisé",
+    why="Une variable remise à zéro dans la boucle perd tout à chaque tour.",
+    dim=("n", 4, 9),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    int total = 0;
+    for (int i = 1; i <= n; i++) {
+        total = 0;
+        total = total + i;
+    }
+    printf("%d\\n", total);
+    return 0;
+}""",
+    attendu=lambda p: [str(sum(range(1, p["n"] + 1)))],
+    obtenu=lambda p: [str(p["n"])],
+    diagnostics=(
+        ("a", "`total` est remis à zéro **dans** la boucle : seul le dernier "
+              "tour subsiste.",
+         "Exact. L'initialisation doit rester avant la boucle. Ici elle est "
+         "répétée à chaque tour, d'où le résultat égal au dernier `i`."),
+        ("b", "La boucle devrait commencer à 0.",
+         "Non : ajouter 0 ne changerait rien à la somme. Et le résultat "
+         "obtenu vaut n, pas une somme incomplète."),
+        ("c", "Le `printf` devrait être dans la boucle.",
+         "Non : on veut une seule valeur à la fin. Le déplacer afficherait "
+         "n lignes, toutes fausses de la même façon."),
+        ("d", "Il manque un `total++` après l'addition.",
+         "Non : l'addition elle-même est correcte. C'est ce qui la précède "
+         "qui annule son effet."),
+    ),
+    bonne="a",
+    level=3,
+)
+
+
+# --------------------------------------------------------------------------
 # Mode « predire la sortie »
 # --------------------------------------------------------------------------
 
@@ -796,6 +988,7 @@ PATTERNS = {
     for p in (LIGNE, REBOURS, PAS, WHILE,
               CARRE, TRIANGLE_RECT, TRIANGLE_INV, TRIANGLE_DROITE,
               LOSANGE, PYRAMIDE, CARRE_MAGIQUE, TABLE,
+              BUG_BORNE, BUG_INVERSE, BUG_ACCOLADES, BUG_REINIT,
               PREDIRE_TRIANGLE, PREDIRE_MAGIQUE)
 }
 
@@ -835,6 +1028,20 @@ def _texter(pattern, selection):
                 return opt.c
         raise KeyError(blank_id)
     return text
+
+
+def broken_rows(key, params):
+    """Sortie reellement produite par le code fautif d'un exercice debug."""
+    pattern = PATTERNS[key]
+    return pattern.broken(params) if pattern.broken else None
+
+
+def option_note(key, blank_id, option_id):
+    """Explication attachee a un choix, en mode diagnostic."""
+    for option in PATTERNS[key].blanks[blank_id][1]:
+        if option.id == option_id:
+            return option.note
+    return ""
 
 
 def build_trace(key, params, selection):

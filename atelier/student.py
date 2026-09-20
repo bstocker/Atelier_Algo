@@ -267,7 +267,14 @@ def api_task(key):
         payload["code"] = ex.render_code(key, params)
         payload["answer"] = stored.get("answer", "")
         payload["target"] = ex.target_rows(key, params) if solved else None
-        payload["lines"] = None
+    elif pattern.mode == "debug":
+        # Rien a cacher : l'ecart est sous les yeux, c'est l'expliquer
+        # qui fait l'exercice.
+        payload["code"] = ex.render_code(key, params)
+        payload["target"] = ex.target_rows(key, params)
+        payload["actual"] = ex.broken_rows(key, params)
+        payload["blanks"] = ex.shuffled_blanks(key, student["token"])
+        payload["selection"] = stored
     else:
         payload["target"] = ex.target_rows(key, params)
         payload["code"] = ex.render_code(key, params, stored)
@@ -297,7 +304,20 @@ def api_check(key):
     target = ex.target_rows(key, params)
     already = bool(task["solved"])
 
-    if pattern.mode == "predict":
+    if pattern.mode == "debug":
+        raw = (payload.get("selection") or {}).get("cause")
+        valid = {o.id for o in pattern.blanks["cause"][1]}
+        chosen = raw if raw in valid else None
+        if chosen is None:
+            touch(student["id"])
+            return jsonify({"complete": False, "ok": False,
+                            "message": "Choisissez une cause."})
+        execute("UPDATE task SET selection = ? WHERE id = ?",
+                (json.dumps({"cause": chosen}), task["id"]))
+        ok = chosen == pattern.ref["cause"]
+        note = ex.option_note(key, "cause", chosen)
+        produced, diff, trace, infinite = None, None, None, False
+    elif pattern.mode == "predict":
         answer = (payload.get("answer") or "")[:4000]
         execute("UPDATE task SET selection = ? WHERE id = ?",
                 (json.dumps({"answer": answer}), task["id"]))
@@ -309,7 +329,7 @@ def api_check(key):
             return jsonify({"complete": False, "ok": False,
                             "message": "Écrivez la sortie attendue."})
         ok, diff = ex.compare(produced, target)
-        trace, infinite = None, False
+        trace, infinite, note = None, False, None
     else:
         raw = payload.get("selection") or {}
         valid = {b: {o.id for o in opts}
@@ -334,6 +354,7 @@ def api_check(key):
         except ex.InfiniteLoop:
             produced, infinite = [], True
         ok, diff = (False, []) if infinite else ex.compare(produced, target)
+        note = None
 
     execute("UPDATE task SET attempts = attempts + 1 WHERE id = ?", (task["id"],))
     if ok and not already:
@@ -351,6 +372,10 @@ def api_check(key):
         "first_time": ok and not already,
         "progress": progress_of(student),
     }
+
+    if pattern.mode == "debug":
+        body["note"] = note
+        return jsonify(body)
 
     if pattern.mode == "predict":
         if ok:

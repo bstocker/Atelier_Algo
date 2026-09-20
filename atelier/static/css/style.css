@@ -343,6 +343,36 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
 #predict-input:read-only { opacity: .7; }
 .grid2.single { grid-template-columns: 1fr; }
 
+/* Mode « trouver le bug » : des phrases, donc des boutons radio */
+#diag-box { margin-bottom: 1.25rem; }
+.diagnoses { display: grid; gap: .5rem; }
+.diagnosis {
+  display: flex; gap: .6rem; align-items: start;
+  padding: .65rem .8rem; border-radius: 8px; cursor: pointer;
+  background: var(--surface-0); border: 1px solid var(--border);
+  font-weight: 400; font-size: .92rem; line-height: 1.45;
+}
+.diagnosis:hover { border-color: var(--border-strong); }
+.diagnosis:has(input:checked) {
+  border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);
+}
+.diagnosis input { margin-top: .25rem; flex: none; }
+.diagnosis code {
+  background: var(--surface-2); padding: .08em .3em; border-radius: 4px;
+  font-size: .9em;
+}
+.note {
+  margin: .9rem 0 0; padding: .7rem .85rem; border-radius: 8px;
+  font-size: .9rem; border: 1px solid var(--border);
+}
+/* Le bandeau porte un liseré et un mot, pas seulement une couleur. */
+.note.ok-note {
+  background: var(--good-bg); border-left: 3px solid var(--good);
+}
+.note.ko-note {
+  background: var(--warning-bg); border-left: 3px solid var(--serious);
+}
+
 /* Niveaux de difficulte, cote enseignant */
 .level-group { margin-bottom: 1.1rem; }
 .level-head {

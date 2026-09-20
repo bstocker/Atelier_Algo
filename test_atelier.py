@@ -375,6 +375,66 @@ class AtelierTest(unittest.TestCase):
             self.assertIn(label, html)
         self.assertIn('data-level="1"', html)
 
+    def test_debug_shows_both_outputs_and_hides_nothing(self):
+        _, code = self.make_session(patterns=("bug_accolades",))
+        client, _ = self.join(code)
+        task = client.get("/api/task/bug_accolades").get_json()
+        self.assertEqual(task["mode"], "debug")
+        n = task["params"]["n"]
+        # Ce qui etait voulu : n lignes d'une etoile. Ce qui sort : une ligne.
+        self.assertEqual(task["target"], ["*"] * n)
+        self.assertEqual(task["actual"], ["*" * n])
+        self.assertEqual(len(task["blanks"][0]["options"]), 4)
+        # Le bon diagnostic n'est pas signale dans la charge utile.
+        self.assertNotIn("note", json.dumps(task))
+        self.assertNotIn("ref", task)
+
+    def test_debug_accepts_only_the_right_cause(self):
+        _, code = self.make_session(patterns=("bug_borne",))
+        client, _ = self.join(code)
+        mauvaise = next(o for o in ex.PATTERNS["bug_borne"].blanks["cause"][1]
+                        if o.id != ex.PATTERNS["bug_borne"].ref["cause"])
+
+        res = client.post("/api/task/bug_borne/check",
+                          json={"selection": {"cause": mauvaise.id}}).get_json()
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["note"], mauvaise.note)   # retour cible
+
+        res = client.post("/api/task/bug_borne/check",
+                          json={"selection": {"cause": "a"}}).get_json()
+        self.assertTrue(res["ok"])
+        self.assertTrue(res["first_time"])
+        self.assertIn("Exact", res["note"])
+
+    def test_debug_without_a_choice_is_not_an_attempt(self):
+        _, code = self.make_session(patterns=("bug_reinit",))
+        client, _ = self.join(code)
+        res = client.post("/api/task/bug_reinit/check",
+                          json={"selection": {"cause": "zzz"}}).get_json()
+        self.assertFalse(res["complete"])
+        self.assertEqual(client.get("/api/task/bug_reinit")
+                         .get_json()["attempts"], 0)
+
+    def test_every_debug_exercise_has_a_visible_gap(self):
+        """Sans écart entre l'attendu et l'obtenu, l'exercice n'a pas de sens."""
+        for key, pattern in ex.PATTERNS.items():
+            if pattern.mode != "debug":
+                continue
+            name, lo, hi = pattern.dim
+            for size in range(lo, hi + 1):
+                params = {name: size}
+                with self.subTest(exercice=key, taille=size):
+                    self.assertNotEqual(ex.target_rows(key, params),
+                                        ex.broken_rows(key, params))
+
+    def test_every_debug_option_carries_an_explanation(self):
+        for key, pattern in ex.PATTERNS.items():
+            if pattern.mode != "debug":
+                continue
+            for option in pattern.blanks["cause"][1]:
+                with self.subTest(exercice=key, choix=option.id):
+                    self.assertTrue(option.note.strip(), option.c)
+
     def test_unknown_pattern_is_404(self):
         _, code = self.make_session(patterns=("carre",))
         client, _ = self.join(code)
@@ -507,8 +567,9 @@ class PatternTest(unittest.TestCase):
 
     def test_reference_output_is_unique_per_blank(self):
         for key, pattern in ex.PATTERNS.items():
-            if not pattern.blanks:      # mode prediction : aucun menu
-                continue
+            if pattern.mode != "complete":
+                continue    # prediction : aucun menu ; diagnostic : pas de
+                            # sortie a comparer, la reponse est une cause
             name, lo, hi = pattern.dim or pattern.value
             for size in range(lo, hi + 1):
                 params = {name: size}
