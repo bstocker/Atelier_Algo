@@ -11,6 +11,7 @@
     app: document.getElementById("app"),
     nav: document.getElementById("tasknav"),
     name: document.getElementById("task-name"),
+    module: document.getElementById("task-module"),
     brief: document.getElementById("task-brief"),
     state: document.getElementById("task-state"),
     target: document.getElementById("target"),
@@ -41,6 +42,7 @@
   };
 
   var tasks = [];
+  var modules = [];        // intitulés des modules couverts par la session
   var current = null;      // donnees de l'exercice affiché
   var selection = {};
 
@@ -80,16 +82,37 @@
       + " / 20. La remise est définitive.";
   }
 
+  function navButton(task) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = (task.solved ? "✓ " : "") + task.name;
+    btn.className = task.solved ? "done" : "";
+    if (current && current.key === task.key) {
+      btn.setAttribute("aria-current", "true");
+    }
+    btn.addEventListener("click", function () { loadTask(task.key); });
+    return btn;
+  }
+
   function renderNav() {
     el.nav.textContent = "";
-    tasks.forEach(function (task) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = (task.solved ? "✓ " : "") + task.name;
-      btn.className = task.solved ? "done" : "";
-      if (current && current.key === task.key) btn.setAttribute("aria-current", "true");
-      btn.addEventListener("click", function () { loadTask(task.key); });
-      el.nav.appendChild(btn);
+
+    // Un seul module : les boutons suffisent. Plusieurs : on les sépare par
+    // module, sinon l'élève ne sait plus de quel sujet relève un exercice.
+    if (modules.length < 2) {
+      tasks.forEach(function (task) { el.nav.appendChild(navButton(task)); });
+      return;
+    }
+    modules.forEach(function (title) {
+      var group = document.createElement("div");
+      group.className = "nav-module";
+      var label = document.createElement("span");
+      label.className = "nav-module-title";
+      label.textContent = title;
+      group.appendChild(label);
+      tasks.filter(function (t) { return t.module === title; })
+           .forEach(function (task) { group.appendChild(navButton(task)); });
+      el.nav.appendChild(group);
     });
   }
 
@@ -297,6 +320,7 @@
       current = data;
       selection = Object.assign({}, data.selection || {});
       el.name.textContent = data.name;
+      el.module.textContent = data.module;
       el.brief.textContent = data.brief + " — " + data.why;
       el.state.textContent = data.solved
         ? "✓ réussi" : "en cours · " + data.attempts + " tentative"
@@ -446,6 +470,7 @@
         return;
       }
       tasks = me.tasks;
+      modules = me.modules || [];
       showProgress(me.progress);
       el.gate.hidden = true;
       el.app.hidden = false;

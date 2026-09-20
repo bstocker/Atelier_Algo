@@ -26,13 +26,14 @@
     var pick = event.target.getAttribute && event.target.getAttribute("data-pick");
     if (!pick) return;
     event.preventDefault();
-    if (pick === "level") {
-      var group = event.target.closest(".level-group");
-      var inGroup = Array.prototype.slice.call(
-        group.querySelectorAll("input[name=patterns]"));
+    if (pick === "level" || pick === "module") {
+      var scope = event.target.closest(
+        pick === "level" ? ".level-group" : ".module");
+      var inScope = Array.prototype.slice.call(
+        scope.querySelectorAll("input[name=patterns]"));
       // Bascule : si tout est deja coche, on decoche.
-      var allOn = inGroup.every(function (b) { return b.checked; });
-      inGroup.forEach(function (b) { b.checked = !allOn; });
+      var allOn = inScope.every(function (b) { return b.checked; });
+      inScope.forEach(function (b) { b.checked = !allOn; });
     } else {
       boxes.forEach(function (b) { b.checked = pick === "all"; });
     }

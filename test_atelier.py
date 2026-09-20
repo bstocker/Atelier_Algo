@@ -6,6 +6,8 @@ import shutil
 import tempfile
 import unittest
 
+from markupsafe import escape
+
 from atelier import create_app, load_env_file, exercises as ex, scoring
 
 
@@ -369,11 +371,41 @@ class AtelierTest(unittest.TestCase):
                          .get_data(as_text=True)
         self.assertIn("/s/" + code, html)
 
-    def test_dashboard_groups_exercises_by_level(self):
+    def test_dashboard_groups_exercises_by_module_then_level(self):
         html = self.admin.get("/admin/").get_data(as_text=True)
+        for module in ex.MODULES:
+            self.assertIn(module.title, html)
+            self.assertIn('data-module="%s"' % module.key, html)
         for label in ex.LEVELS.values():
             self.assertIn(label, html)
         self.assertIn('data-level="1"', html)
+
+    def test_student_sees_the_module_of_each_exercise(self):
+        _, code = self.make_session(patterns=("ligne", "losange"))
+        client, _ = self.join(code)
+        me = client.get("/api/me").get_json()
+        self.assertEqual(me["modules"], ["Les boucles"])
+        self.assertTrue(all(t["module"] == "Les boucles" for t in me["tasks"]))
+        self.assertEqual(client.get("/api/task/ligne").get_json()["module"],
+                         "Les boucles")
+
+    def test_session_page_names_its_modules(self):
+        session_id, _ = self.make_session(patterns=("ligne", "bug_borne"))
+        html = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        self.assertIn("Les boucles", html)
+
+    def test_the_old_subtitle_is_gone_from_every_page(self):
+        session_id, code = self.make_session(patterns=("ligne",))
+        client, _ = self.join(code)
+        pages = [self.app.test_client().get("/"),
+                 client.get("/exercice"),
+                 self.admin.get("/admin/"),
+                 self.admin.get("/admin/sessions/%d" % session_id)]
+        for page in pages:
+            html = page.get_data(as_text=True)
+            self.assertNotIn("motifs en C", html)
+            self.assertNotIn("Atelier&nbsp;Algo", html)
 
     def test_debug_shows_both_outputs_and_hides_nothing(self):
         _, code = self.make_session(patterns=("bug_accolades",))
@@ -426,6 +458,30 @@ class AtelierTest(unittest.TestCase):
                 with self.subTest(exercice=key, taille=size):
                     self.assertNotEqual(ex.target_rows(key, params),
                                         ex.broken_rows(key, params))
+
+    def test_debug_titles_do_not_give_the_answer_away(self):
+        """Le nom du défaut ne doit jamais descendre jusqu'à l'élève."""
+        _, code = self.make_session(
+            patterns=tuple(k for k in ex.ALL_KEYS
+                           if ex.PATTERNS[k].mode == "debug"))
+        client, _ = self.join(code)
+        for key in ex.ALL_KEYS:
+            pattern = ex.PATTERNS[key]
+            if pattern.mode != "debug":
+                continue
+            with self.subTest(exercice=key):
+                self.assertTrue(pattern.teacher_note)
+                envoye = json.dumps(client.get("/api/task/" + key).get_json())
+                self.assertNotIn(pattern.teacher_note, envoye)
+                self.assertNotIn("Défaut", envoye)
+
+    def test_teacher_sees_the_defect_when_composing(self):
+        page = self.admin.get("/admin/").get_data(as_text=True)
+        for key in ex.ALL_KEYS:
+            pattern = ex.PATTERNS[key]
+            if pattern.mode == "debug":
+                with self.subTest(exercice=key):
+                    self.assertIn(str(escape(pattern.teacher_note)), page)
 
     def test_every_debug_option_carries_an_explanation(self):
         for key, pattern in ex.PATTERNS.items():
@@ -522,6 +578,33 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(scoring.final_score(0, 8, 0), 0.0)
         self.assertEqual(scoring.final_score(4, 8, 20), 0.0)
         self.assertEqual(scoring.final_score(0, 0, 0), 0.0)
+
+
+class CatalogueTest(unittest.TestCase):
+    """Le catalogue doit rester cohérent quand on ajoute des modules."""
+
+    def test_every_exercise_belongs_to_exactly_one_module(self):
+        vus = []
+        for module in ex.MODULES:
+            vus.extend(module.keys)
+        self.assertEqual(sorted(vus), sorted(ex.ALL_KEYS))
+        self.assertEqual(len(vus), len(set(vus)), "exercice dans deux modules")
+
+    def test_module_keys_all_exist(self):
+        for module in ex.MODULES:
+            for key in module.keys:
+                self.assertIn(key, ex.PATTERNS, "%s/%s" % (module.key, key))
+
+    def test_every_module_is_described(self):
+        for module in ex.MODULES:
+            self.assertTrue(module.title.strip(), module.key)
+            self.assertTrue(module.summary.strip(), module.key)
+            self.assertIn(module.level, ex.LEVELS, module.key)
+
+    def test_catalogue_covers_every_exercise(self):
+        vus = [p.key for _module, niveaux in ex.catalogue()
+               for _lvl, _nom, motifs in niveaux for p in motifs]
+        self.assertEqual(sorted(vus), sorted(ex.ALL_KEYS))
 
 
 class TraceConsistencyTest(unittest.TestCase):

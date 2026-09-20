@@ -115,7 +115,7 @@ Trois conséquences à connaître :
 ### Ouvrir votre première session
 
 1. Rendez-vous sur `/admin/login` et connectez-vous avec `ATELIER_ADMIN_USER` / `ATELIER_ADMIN_PASSWORD`.
-2. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par niveau de difficulté**, avec un bouton pour cocher un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu.
+2. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par module puis par niveau**, avec un bouton pour cocher un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
 3. Cliquez sur **Lancer la session**.
 4. Copiez le **lien à transmettre** et envoyez-le à vos étudiants. Le code y est déjà : ils n'ont que leur nom et leur prénom à saisir. Le code reste affiché à côté si vous préférez le dicter.
 5. Suivez leurs réponses en direct sur la même page.
@@ -152,14 +152,25 @@ Difficulté : Moyenne (~180 minutes)
 
 Une épreuve surveillée sur les **boucles en C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible.
 
-Dix-huit exercices sont disponibles, répartis en **quatre niveaux de difficulté** que l'enseignant voit au moment de composer sa session.
+Les exercices sont organisés en **modules**. Un module porte un titre, un niveau indicatif et un résumé ; il regroupe des exercices qui gardent chacun leur propre niveau, plus fin.
 
-| Niveau | Exercices |
+Un seul module existe aujourd'hui — **Les boucles**, dix-huit exercices — mais la structure est prévue pour en accueillir d'autres : les conditions, les tableaux, des quiz.
+
+| Niveau | Exercices du module « Les boucles » |
 | --- | --- |
 | ●○○○ Découverte | Une ligne d'étoiles, Compte à rebours |
-| ●●○○ Facile | Le pas de la boucle, La boucle while, Carré, Triangle rectangle, Triangle inversé, Bug : la borne exclue, Bug : la comparaison inversée |
-| ●●●○ Moyen | Triangle aligné à droite, Pyramide, Carré magique, Table de multiplication, Bug : les accolades manquantes, Bug : l'accumulateur réinitialisé, Prédire : triangle aligné à droite |
+| ●●○○ Facile | Le pas de la boucle, La boucle while, Carré, Triangle rectangle, Triangle inversé, Bug : le triangle rectangle, Bug : la ligne d'étoiles |
+| ●●●○ Moyen | Triangle aligné à droite, Pyramide, Carré magique, Table de multiplication, Bug : les n lignes, Bug : la somme de 1 à n, Prédire : triangle aligné à droite |
 | ●●●● Avancé | Losange, Prédire : carré magique |
+
+**Ajouter un module** tient en une entrée dans `MODULES` :
+
+```python
+Module(key="conditions", title="Les conditions", level=2,
+       summary="…", keys=("si_simple", "si_sinon", …))
+```
+
+Trois tests veillent sur la cohérence : chaque exercice appartient à exactement un module, toutes les clés citées existent, et chaque module porte un titre, un résumé et un niveau connu.
 
 Trois modes coexistent :
 
@@ -232,12 +243,14 @@ Les espaces de début comptent, ceux de fin sont ignorés, et les lignes vides f
 
 Un code fautif, la sortie qu'il **devrait** produire, celle qu'il produit **réellement**, et quatre causes possibles. L'écart est sous les yeux : ce qui fait l'exercice, c'est de l'expliquer.
 
-| Exercice | Le défaut | Ce qu'on observe |
+| Exercice | Le défaut *(réservé à l'enseignant)* | Ce qu'on observe |
 | --- | --- | --- |
-| La borne exclue | `j < i` au lieu de `j <= i` | Première ligne vide, une étoile manque partout |
-| La comparaison inversée | `j > n` au lieu de `j < n` | Rien du tout : le test est faux dès le premier passage |
-| Les accolades manquantes | Deux instructions indentées, une seule dans la boucle | Toutes les étoiles sur une seule ligne |
-| L'accumulateur réinitialisé | `total = 0` **dans** la boucle | Le résultat vaut le dernier terme, pas la somme |
+| Bug : le triangle rectangle | `j < i` au lieu de `j <= i` | Première ligne vide, une étoile manque partout |
+| Bug : la ligne d'étoiles | `j > n` au lieu de `j < n` | Rien du tout : le test est faux dès le premier passage |
+| Bug : les n lignes | Accolades manquantes : une seule instruction dans la boucle | Toutes les étoiles sur une seule ligne |
+| Bug : la somme de 1 à n | `total = 0` **dans** la boucle | Le résultat vaut le dernier terme, pas la somme |
+
+**Le nom de l'exercice désigne le but du programme, jamais son défaut.** Un titre comme « la borne exclue » donnerait la réponse avant lecture. Le nom du défaut part dans `teacher_note`, que seul le formulaire de composition affiche — un test vérifie qu'il ne descend jamais dans la réponse envoyée à l'élève.
 
 Chaque cause porte sa propre explication, affichée après le choix — y compris les mauvaises. Choisir « la condition devrait être `i <= n` » sur les accolades manquantes répond : *« Non : le nombre d'étoiles est correct. C'est leur répartition en lignes qui ne l'est pas. »* Le retour est donc utile même quand l'élève se trompe.
 
@@ -268,7 +281,8 @@ L'enseignant choisit à la création de la session quels motifs composent l'épr
 
 Le cœur est un moteur piloté par des données : chaque exercice est un objet décrivant sa cible, son code à trous et sa logique de génération. Le rendu est séparé du contenu.
 
-- `name`, `brief`, `why` : libellés affichés.
+- `name`, `brief`, `why` : libellés affichés à l'élève.
+- `teacher_note` : mention réservée au formulaire de composition.
 - `lesson` : rappel de cours facultatif, affiché au-dessus de l'énoncé.
 - `dim` / `value` : taille tirable (`n`, `h`) ou valeur saisie (`v`).
 - `blanks` : les menus à compléter ; chaque option porte son texte C et la fonction Python équivalente.
@@ -390,7 +404,7 @@ PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi dire
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 50 tests
+python3 -m unittest test_atelier -v     # 59 tests
 ```
 
 ---------------------------------------------------
@@ -408,7 +422,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (50 tests).
+La suite `test_atelier.py` couvre ces points (59 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog

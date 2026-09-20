@@ -81,16 +81,10 @@ def dashboard():
             WHERE x.status IN ('draft', 'open')
             GROUP BY x.id ORDER BY x.created_at DESC""",
     )
-    # Regroupes par difficulte : l'enseignant compose sa session en
-    # choisissant un niveau plutot qu'en lisant douze intitules d'affilee.
-    par_niveau = []
-    for level in sorted(ex.LEVELS):
-        motifs = [ex.PATTERNS[k] for k in ex.ALL_KEYS
-                  if ex.PATTERNS[k].level == level]
-        if motifs:
-            par_niveau.append((level, ex.LEVELS[level], motifs))
+    # Module puis niveau : l'enseignant choisit d'abord un sujet, ensuite
+    # une difficulte, plutot que de lire dix-huit intitules d'affilee.
     return render_template("admin_dashboard.html", sessions=sessions,
-                           par_niveau=par_niveau)
+                           catalogue=ex.catalogue(), levels=ex.LEVELS)
 
 
 @bp.post("/sessions")
@@ -164,6 +158,7 @@ def session_view(session_id):
     return render_template(
         "admin_session.html", room=room,
         motifs=[ex.PATTERNS[k] for k in keys],
+        modules=ex.modules_for(keys),
         levels=ex.LEVELS,
         # Lien a transmettre : le code y est deja, l'etudiant ne saisit
         # que son nom et son prenom.

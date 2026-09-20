@@ -25,6 +25,21 @@ LEVELS = {
 }
 
 
+@dataclass(frozen=True)
+class Module:
+    """Un ensemble d'exercices sur un meme sujet.
+
+    Les modules structurent le catalogue : « Les boucles » aujourd'hui,
+    « Les conditions » ou un module de quiz demain. Chacun porte son titre
+    et son niveau ; les exercices gardent le leur, plus fin, a l'interieur.
+    """
+    key: str
+    title: str
+    level: int
+    summary: str
+    keys: tuple
+
+
 class InfiniteLoop(Exception):
     """La selection de l'eleve produit une boucle qui ne s'arrete jamais."""
 
@@ -56,6 +71,7 @@ class Pattern:
     trace: Callable = None                # (params, get, text) -> list[dict]
     lesson: tuple = ()                    # points a retenir, affiches en tete
     level: int = 2                        # cle de LEVELS
+    teacher_note: str = ""                # visible du seul enseignant
     mode: str = "complete"                # complete | predict | debug
     broken: Callable = None               # mode debug : la sortie erronee
 
@@ -738,18 +754,25 @@ int main(void) {
 # Mode « trouver le bug »
 # --------------------------------------------------------------------------
 
-def debug_pattern(key, name, why, tpl, dim, attendu, obtenu, diagnostics,
-                  bonne, level):
+def debug_pattern(key, name, but, defaut, tpl, dim, attendu, obtenu,
+                  diagnostics, bonne, level):
     """Exercice de diagnostic : un code fautif, sa sortie, et quatre causes.
 
     Rien n'est cache ici — l'eleve voit ce qui etait attendu et ce qui sort.
     La difficulte est d'expliquer l'ecart, pas de le constater.
+
+    Le nom et l'intitule designent le BUT du programme, jamais son defaut :
+    un titre comme « la borne exclue » donnerait la reponse avant lecture.
+    Le nom du defaut part dans `teacher_note`, que seul le formulaire de
+    composition affiche.
     """
     return Pattern(
         key=key,
         name=name,
-        brief="Ce code ne produit pas ce qu'il devrait. Trouvez pourquoi.",
-        why=why,
+        brief="Ce programme devait %s. Il n'y arrive pas : trouvez pourquoi."
+              % but,
+        why="Une seule instruction est en cause.",
+        teacher_note="Défaut : %s" % defaut,
         lesson=(
             "Comparez les deux sorties **ligne à ligne** : l'écart vous dit "
             "où regarder.",
@@ -769,8 +792,9 @@ def debug_pattern(key, name, why, tpl, dim, attendu, obtenu, diagnostics,
 
 BUG_BORNE = debug_pattern(
     key="bug_borne",
-    name="Bug : la borne exclue",
-    why="Une erreur d'un rang sur la borne décale tout le motif.",
+    name="Bug : le triangle rectangle",
+    but="dessiner un triangle rectangle de n lignes",
+    defaut="borne exclue, j < i au lieu de j <= i",
     dim=("n", 4, 7),
     tpl="""#include <stdio.h>
 
@@ -808,8 +832,9 @@ int main(void) {
 
 BUG_INVERSE = debug_pattern(
     key="bug_inverse",
-    name="Bug : la comparaison inversée",
-    why="Un test faux dès le départ ne donne pas une erreur, mais rien du tout.",
+    name="Bug : la ligne d'étoiles",
+    but="afficher une ligne de n étoiles",
+    defaut="comparaison inversée, la boucle ne démarre jamais",
     dim=("n", 4, 8),
     tpl="""#include <stdio.h>
 
@@ -845,8 +870,9 @@ int main(void) {
 
 BUG_ACCOLADES = debug_pattern(
     key="bug_accolades",
-    name="Bug : les accolades manquantes",
-    why="L'indentation ne dit rien au compilateur. Seules les accolades comptent.",
+    name="Bug : les n lignes",
+    but="afficher n lignes d'une étoile chacune",
+    defaut="accolades manquantes, l'indentation trompe le lecteur",
     dim=("n", 3, 6),
     tpl="""#include <stdio.h>
 
@@ -882,8 +908,9 @@ int main(void) {
 
 BUG_REINIT = debug_pattern(
     key="bug_reinit",
-    name="Bug : l'accumulateur réinitialisé",
-    why="Une variable remise à zéro dans la boucle perd tout à chaque tour.",
+    name="Bug : la somme de 1 à n",
+    but="calculer la somme des entiers de 1 à n",
+    defaut="accumulateur remis à zéro dans la boucle",
     dim=("n", 4, 9),
     tpl="""#include <stdio.h>
 
@@ -993,6 +1020,54 @@ PATTERNS = {
 }
 
 ALL_KEYS = list(PATTERNS)
+
+
+# --------------------------------------------------------------------------
+# Catalogue
+# --------------------------------------------------------------------------
+
+MODULES = (
+    Module(
+        key="boucles",
+        title="Les boucles",
+        level=1,
+        summary="De la boucle simple aux motifs imbriqués : répétition, "
+                "compteur, condition d'arrêt, pas et accumulateur.",
+        keys=tuple(ALL_KEYS),
+    ),
+)
+
+MODULE_BY_KEY = {m.key: m for m in MODULES}
+_MODULE_OF = {key: m for m in MODULES for key in m.keys}
+
+
+def module_of(pattern_key):
+    """Module auquel appartient un exercice."""
+    return _MODULE_OF[pattern_key]
+
+
+def modules_for(pattern_keys):
+    """Modules couverts par une liste d'exercices, dans l'ordre du catalogue.
+
+    Sert a n'afficher les intitules de module que lorsqu'une session en
+    croise plusieurs : avec un seul, ils n'apporteraient que du bruit.
+    """
+    present = {module_of(k).key for k in pattern_keys}
+    return [m for m in MODULES if m.key in present]
+
+
+def catalogue():
+    """Le catalogue tel que l'enseignant le compose : module, puis niveau."""
+    out = []
+    for module in MODULES:
+        niveaux = []
+        for level in sorted(LEVELS):
+            motifs = [PATTERNS[k] for k in module.keys
+                      if PATTERNS[k].level == level]
+            if motifs:
+                niveaux.append((level, LEVELS[level], motifs))
+        out.append((module, niveaux))
+    return out
 
 
 # --------------------------------------------------------------------------

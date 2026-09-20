@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Atelier Algo{% endblock %} · Evalio</title>
+  <title>{% block title %}Exercices{% endblock %} · Evalio</title>
   <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,7 +21,6 @@
         <img class="brand-logo dark"
              src="{{ url_for('static', filename='img/logo-evalio-compact-dark.png') }}"
              alt="Evalio" width="320" height="92">
-        <span class="brand-sub">Atelier&nbsp;Algo · motifs en C</span>
       </span>
       <div class="topbar-right">
         {% block topbar %}{% endblock %}

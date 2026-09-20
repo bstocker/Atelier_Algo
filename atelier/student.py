@@ -223,10 +223,15 @@ def api_me():
         "session_status": student["session_status"],
         "finished": bool(student["finished_at"]),
         "progress": progress_of(student),
+        # Les intitulés de module ne servent que si la session en croise
+        # plusieurs ; sinon ils n'ajouteraient que du bruit.
+        "modules": [m.title for m in
+                    ex.modules_for([t["pattern_key"] for t in rows])],
         "tasks": [{
             "key": t["pattern_key"],
             "name": ex.PATTERNS[t["pattern_key"]].name,
             "level": ex.PATTERNS[t["pattern_key"]].level,
+            "module": ex.module_of(t["pattern_key"]).title,
             "solved": bool(t["solved"]),
             "attempts": t["attempts"],
         } for t in rows],
@@ -256,6 +261,7 @@ def api_task(key):
         "mode": pattern.mode,
         "level": pattern.level,
         "level_name": ex.LEVELS[pattern.level],
+        "module": ex.module_of(key).title,
         "params": params,
         "lesson": list(pattern.lesson),
         "solved": solved,

@@ -167,6 +167,10 @@ legend { font-weight: 600; font-size: .9rem; padding: 0 .4rem; }
 .check { display: flex; gap: .55rem; align-items: start; font-weight: 400;
          padding: .5rem; border-radius: 8px; background: var(--surface-0); }
 .check em { display: block; font-style: normal; color: var(--text-muted); font-size: .8rem; }
+/* Réservé au formulaire de composition : nomme le défaut d'un exercice de
+   diagnostic, ce que l'énoncé se garde bien de faire. */
+.check em.teacher-note { margin-top: .2rem; color: var(--accent); font-weight: 500; }
+.check em.teacher-note code { font-family: inherit; }
 
 button, .ghost {
   font: 500 .92rem/1 "Inter", system-ui, sans-serif;
@@ -371,6 +375,40 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
 }
 .note.ko-note {
   background: var(--warning-bg); border-left: 3px solid var(--serious);
+}
+
+/* Modules : le premier niveau de regroupement du catalogue */
+.module {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem 1.1rem; margin-bottom: 1.1rem;
+}
+.module + .module { margin-top: .25rem; }
+.module-head {
+  display: flex; justify-content: space-between; align-items: start;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: .9rem;
+}
+.module-title {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin: 0 0 .2rem; font-size: 1.05rem;
+}
+.module-head .hint { margin: 0; max-width: 52ch; }
+
+/* Fil d'ariane au-dessus du titre d'exercice */
+.eyebrow {
+  display: block; font-size: .75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-muted); margin-bottom: .15rem;
+}
+
+/* Navigation groupee, quand la session croise plusieurs modules */
+.nav-module {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  padding: .35rem .55rem; border-radius: 8px;
+  background: var(--surface-1); border: 1px solid var(--border);
+}
+.nav-module-title {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted); margin-right: .15rem;
 }
 
 /* Niveaux de difficulte, cote enseignant */

@@ -14,6 +14,10 @@
     <div>
       <h1>{{ room['title'] }}</h1>
       <p class="muted">
+        <strong>{{ modules|map(attribute='title')|join(' · ') }}</strong>
+        — {{ motifs|length }} exercice{{ 's' if motifs|length > 1 }}
+      </p>
+      <p class="muted">
         {% for m in motifs %}<span class="chip lvl{{ m.level }}"
            title="Niveau : {{ levels[m.level] }}">{{ m.name }}</span>{% endfor %}
       </p>
