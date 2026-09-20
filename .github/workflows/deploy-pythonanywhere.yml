@@ -93,6 +93,29 @@ jobs:
             echo "PA_DIR=${PA_TARGET_DIR%/}"   # a trailing slash would double the separator
           } >> "$GITHUB_ENV"
 
+          # Helper partage par les etapes suivantes. L'API PythonAnywhere
+          # limite le nombre d'appels par minute : avec une trentaine de
+          # fichiers, deux deploiements rapproches suffisent a la saturer.
+          # Elle repond alors 429 en indiquant le delai a respecter.
+          cat > "${RUNNER_TEMP}/pa-api.sh" <<'HELPER'
+          pa_post() {
+            local url="$1"; shift
+            local attempt delai
+            for attempt in 1 2 3 4 5; do
+              PA_STATUS="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
+                -H "Authorization: Token ${PA_TOKEN}" "$@" "$url")"
+              [[ "$PA_STATUS" == "429" ]] || return 0
+              delai="$(grep -o '[0-9]\+ second' "$RESP" | head -1 \
+                       | grep -o '[0-9]\+' || true)"
+              [[ -n "$delai" ]] || delai=30
+              echo "   quota de l'API atteint, reprise dans $((delai + 2)) s"
+              sleep $((delai + 2))
+            done
+            return 0
+          }
+          HELPER
+          sed -i 's/^          //' "${RUNNER_TEMP}/pa-api.sh"
+
           echo "Les 7 secrets requis sont presents et bien formes."
 
       - name: Upload application files
@@ -100,6 +123,7 @@ jobs:
         run: |
           set -euo pipefail
           RESP="$(mktemp)"; trap 'rm -f "$RESP"' EXIT
+          source "${RUNNER_TEMP}/pa-api.sh"
 
           echo "Using PythonAnywhere host: ${PA_API_HOST}"
           echo "Target directory: ${PA_DIR}"
@@ -118,15 +142,14 @@ jobs:
             remote_path="${PA_DIR}/${rel}"
             echo " - ${rel} -> ${remote_path}"
 
-            # No --fail here: it hides the response body, and the body is the
-            # only place the API explains what it refused.
-            status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
-              -H "Authorization: Token ${PA_TOKEN}" \
-              -F "content=@${file}" \
-              "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}")"
+            # Pas de --fail : il masque le corps de la reponse, seul endroit
+            # ou l'API explique son refus.
+            pa_post \
+              "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}" \
+              -F "content=@${file}"
 
-            if [[ "$status" != 2* ]]; then
-              echo "::error::Envoi de ${rel} refuse (HTTP ${status})"
+            if [[ "$PA_STATUS" != 2* ]]; then
+              echo "::error::Envoi de ${rel} refuse (HTTP ${PA_STATUS})"
               echo "Reponse de l'API :"; cat "$RESP"; echo
               exit 1
             fi
@@ -145,6 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           RESP="$(mktemp)"; trap 'rm -f "$RESP" "${ENV_FILE:-}"' EXIT
+          source "${RUNNER_TEMP}/pa-api.sh"
 
           # Built outside the workspace so the previous step can never pick it
           # up, and so `umask` applies before the secrets are written.
@@ -163,13 +187,12 @@ jobs:
 
           echo " - .env (${ATELIER_DATABASE:+ATELIER_DATABASE, }ATELIER_SECRET_KEY, ATELIER_ADMIN_USER, ATELIER_ADMIN_PASSWORD) -> ${PA_DIR}/.env"
 
-          status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
-            -H "Authorization: Token ${PA_TOKEN}" \
-            -F "content=@${ENV_FILE}" \
-            "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/files/path${PA_DIR}/.env")"
+          pa_post \
+            "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/files/path${PA_DIR}/.env" \
+            -F "content=@${ENV_FILE}"
 
-          if [[ "$status" != 2* ]]; then
-            echo "::error::Envoi du fichier .env refuse (HTTP ${status})"
+          if [[ "$PA_STATUS" != 2* ]]; then
+            echo "::error::Envoi du fichier .env refuse (HTTP ${PA_STATUS})"
             echo "Reponse de l'API :"; cat "$RESP"; echo
             exit 1
           fi
@@ -179,28 +202,27 @@ jobs:
         run: |
           set -euo pipefail
           RESP="$(mktemp)"; trap 'rm -f "$RESP"' EXIT
+          source "${RUNNER_TEMP}/pa-api.sh"
 
           echo "Reloading webapp ${PA_WEBAPP_DOMAIN}..."
 
           # A 409 often just means a reload is already running, so retry a few
           # times before giving up. Any other status is final.
-          status=""
+          PA_STATUS=""
           for attempt in 1 2 3; do
-            status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
-              -H "Authorization: Token ${PA_TOKEN}" \
-              "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/")"
+            pa_post "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/"
 
-            if [[ "$status" == 2* ]]; then break; fi
+            if [[ "$PA_STATUS" == 2* ]]; then break; fi
 
-            echo "Tentative ${attempt}/3 : HTTP ${status}"
+            echo "Tentative ${attempt}/3 : HTTP ${PA_STATUS}"
             echo "Reponse de l'API :"; cat "$RESP"; echo
-            if [[ "$status" != "409" ]]; then break; fi
+            if [[ "$PA_STATUS" != "409" ]]; then break; fi
             sleep 10
           done
 
-          if [[ "$status" != 2* ]]; then
-            echo "::error::Rechargement de la webapp refuse (HTTP ${status})"
-            case "$status" in
+          if [[ "$PA_STATUS" != 2* ]]; then
+            echo "::error::Rechargement de la webapp refuse (HTTP ${PA_STATUS})"
+            case "$PA_STATUS" in
               403) echo "Cause probable : PA_TOKEN invalide ou revoque (PythonAnywhere -> Account -> API Token)." ;;
               404) echo "Cause probable : PA_WEBAPP_DOMAIN ne correspond a aucune webapp. Valeur attendue : monuser.pythonanywhere.com" ;;
               409) echo "Cause probable : la webapp est expiree. Sur un compte gratuit, PythonAnywhere la desactive tous les 3 mois."

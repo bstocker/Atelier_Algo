@@ -408,6 +408,12 @@ La grille place le nom, puis **les sorties de fenêtre en deuxième colonne** : 
 
 Le nom lui-même change de couleur : **orange à la première sortie, rouge à partir de la deuxième**. Les teintes sont choisies pour du texte, pas pour des marques — 4,9:1 et 5,7:1 sur la surface claire, 8,4:1 et 8,0:1 sur la sombre, au-dessus du seuil AA. Le compte figurant juste à côté, la couleur n'est jamais le seul canal.
 
+### Le quota de l'API PythonAnywhere
+
+Le déploiement envoie une trentaine de fichiers, un appel chacun. L'API limite le nombre d'appels par minute : deux déploiements rapprochés suffisent à la saturer, et elle répond alors `429` en indiquant le délai à respecter.
+
+Les appels passent donc par un helper qui lit ce délai dans la réponse, attend, et réessaie jusqu'à cinq fois. Un déploiement pris dans le quota est plus lent, mais il aboutit.
+
 ### Pourquoi une interrogation périodique et pas de WebSocket
 
 PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi direct interroge donc `/admin/api/sessions/<id>/live` toutes les 3 secondes. La charge reste faible : une requête par enseignant connecté, pas par étudiant.
