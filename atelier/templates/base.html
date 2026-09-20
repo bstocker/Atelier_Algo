@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Atelier Algo{% endblock %}</title>
+  <title>{% block title %}Atelier Algo{% endblock %} · Evalio</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -12,7 +14,15 @@
 <body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
     <div class="topbar-inner">
-      <span class="brand">Atelier&nbsp;Algo <span class="brand-sub">motifs en C</span></span>
+      <span class="brand">
+        <img class="brand-logo light"
+             src="{{ url_for('static', filename='img/logo-evalio-compact.png') }}"
+             alt="Evalio" width="320" height="92">
+        <img class="brand-logo dark"
+             src="{{ url_for('static', filename='img/logo-evalio-compact-dark.png') }}"
+             alt="Evalio" width="320" height="92">
+        <span class="brand-sub">Atelier&nbsp;Algo · motifs en C</span>
+      </span>
       <div class="topbar-right">
         {% block topbar %}{% endblock %}
         <button type="button" class="ghost" id="theme-toggle" aria-label="Changer de theme">Theme</button>

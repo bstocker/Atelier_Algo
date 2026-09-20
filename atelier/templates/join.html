@@ -2,6 +2,12 @@
 {% block title %}Rejoindre une session{% endblock %}
 {% block content %}
 <div class="card card-narrow">
+  <img class="hero-logo light"
+       src="{{ url_for('static', filename='img/logo-evalio.png') }}"
+       alt="Evalio — quizzes for a brighter you" width="560" height="162">
+  <img class="hero-logo dark"
+       src="{{ url_for('static', filename='img/logo-evalio-dark.png') }}"
+       alt="Evalio — quizzes for a brighter you" width="560" height="162">
   <h1>Rejoindre une session</h1>
   <p class="muted">Identifiez-vous avec votre nom et votre prénom, puis saisissez
      le code affiché par l'enseignant.</p>

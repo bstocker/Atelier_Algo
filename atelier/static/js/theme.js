@@ -10,8 +10,12 @@
   var btn = document.getElementById("theme-toggle");
   if (!btn) return;
   btn.addEventListener("click", function () {
-    var dark = root.getAttribute("data-theme") === "dark"
-      || (!root.hasAttribute("data-theme")
+    // base.html pose data-theme="auto" : tester la seule presence de
+    // l'attribut ne dit pas si un theme a ete choisi. Seules les valeurs
+    // "light" et "dark" comptent, tout le reste signifie « suivre le systeme ».
+    var choisi = root.getAttribute("data-theme");
+    var dark = choisi === "dark"
+      || (choisi !== "light"
           && window.matchMedia("(prefers-color-scheme: dark)").matches);
     var next = dark ? "light" : "dark";
     root.setAttribute("data-theme", next);

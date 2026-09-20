@@ -111,6 +111,7 @@ jobs:
             # Exclusions (adjust to taste)
             case "$rel" in
               .git/*|.github/*|.venv/*|__pycache__/*|node_modules/*) continue ;;
+              design/*) continue ;;   # sources graphiques, non destinees au web
               *.pyc|.DS_Store|.env) continue ;;
             esac
 
@@ -132,7 +133,7 @@ jobs:
 
           done < <(
             find . \
-              -type d \( -name .git -o -name .github -o -name .venv -o -name __pycache__ -o -name node_modules \) -prune -false \
+              -type d \( -name .git -o -name .github -o -name .venv -o -name __pycache__ -o -name node_modules -o -name design \) -prune -false \
               -o -type f \
                 ! -name ".DS_Store" \
                 ! -name "*.pyc" \

@@ -99,8 +99,36 @@ p  { margin: 0 0 1em; }
   display: flex; align-items: center; gap: .75rem;
 }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
-.brand { font-weight: 700; letter-spacing: -.01em; }
-.brand-sub { font-weight: 400; color: var(--text-muted); font-size: .85rem; }
+.brand { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.brand-sub { font-weight: 400; color: var(--text-muted); font-size: .85rem;
+             white-space: nowrap; }
+.brand-logo { height: 30px; width: auto; }
+
+@media (max-width: 620px) {
+  .brand-sub { display: none; }
+}
+
+/* Deux fichiers plutot qu'un filtre CSS : le bleu marine du mot-symbole
+   serait illisible sur fond sombre, et un filtre d'inversion emporterait
+   aussi le turquoise et le gris clair de la baseline. La variante sombre
+   eclaircit le marine en conservant teinte et saturation.
+
+   La bascule doit suivre le reglage systeme ET le choix manuel du visiteur,
+   d'ou les deux portees : le `:not([data-theme="light"])` laisse un theme
+   clair impose battre un systeme en sombre. */
+.brand-logo, .hero-logo { display: block; }
+.brand-logo.dark, .hero-logo.dark { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .brand-logo.light,
+  :root:where(:not([data-theme="light"])) .hero-logo.light { display: none; }
+  :root:where(:not([data-theme="light"])) .brand-logo.dark,
+  :root:where(:not([data-theme="light"])) .hero-logo.dark { display: block; }
+}
+:root[data-theme="dark"] .brand-logo.light,
+:root[data-theme="dark"] .hero-logo.light { display: none; }
+:root[data-theme="dark"] .brand-logo.dark,
+:root[data-theme="dark"] .hero-logo.dark { display: block; }
 
 .wrap { max-width: 720px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
 .wrap.wide { max-width: 1200px; }
@@ -114,6 +142,7 @@ p  { margin: 0 0 1em; }
   margin-bottom: 1.25rem;
 }
 .card-narrow { max-width: 520px; margin-inline: auto; }
+.hero-logo { width: 240px; height: auto; margin: 0 auto 1.5rem; }
 
 .stack { display: grid; gap: 1rem; }
 .inline { display: inline; }

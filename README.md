@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="atelier/static/img/logo-evalio.png" alt="Evalio — Quizzes for a brighter you" width="380">
+</p>
+
 ------------------------------------------------------------------------------------------------------
 🎯 PROJET ARCHITECTURE SI — Atelier « boucles sans IA »
 ------------------------------------------------------------------------------------------------------
@@ -228,6 +232,8 @@ La comparaison se fait ligne à ligne, après suppression des espaces de fin, et
 
 ```
 flask_app.py            Point d'entrée WSGI
+design/                 Sources graphiques, exclues du déploiement
+outils/logo.py          Régénère les déclinaisons du logo
 atelier/
   __init__.py           Fabrique d'application et configuration
   db.py                 Connexion SQLite, une par requête
@@ -239,6 +245,7 @@ atelier/
   templates/            Gabarits Jinja
   static/
     css/style.css       Thème clair/sombre
+    img/                Logo Evalio (clair et sombre), favicon
     js/proctor.js       Surveillance de la fenêtre
     js/exercise.js      Page d'exercice
     js/admin_live.js    Suivi direct (interrogation toutes les 3 s)
@@ -258,6 +265,38 @@ test_atelier.py         Tests de bout en bout
 - **Responsive :** du mobile au grand écran ; le code et les grilles défilent horizontalement si besoin.
 
 > **Note d'évolution.** La première version du projet visait un fichier HTML autonome, sans backend ni donnée élève stockée. L'ajout de l'identification, du suivi en direct, des sessions pilotées par l'enseignant et de l'historique a rendu un serveur indispensable : on ne peut ni noter de façon fiable, ni empêcher la lecture de la réponse attendue, ni consolider des résultats, depuis le seul navigateur.
+
+### Identité visuelle
+
+Le logo Evalio est affiché dans la barre de navigation de chaque page, en tête de la page d'identification, et sert de favicon.
+
+| Fichier | Usage |
+| --- | --- |
+| `logo-evalio.png` | Verrouillage complet : page d'identification, et en tête de ce README |
+| `logo-evalio-dark.png` | Idem, thème sombre |
+| `logo-evalio-compact.png` | Barre de navigation |
+| `logo-evalio-compact-dark.png` | Idem, thème sombre |
+| `favicon.ico` | Favicon, 16 / 32 / 48 px |
+| `apple-touch-icon.png` | Icône d'écran d'accueil iOS, 180 px |
+
+*(tous dans `atelier/static/img/`, régénérés depuis `design/`)*
+
+Les icônes sont produites depuis `design/Favicon.png`, le pictogramme seul fourni en 1254 px avec sa transparence. Le favicon reste transparent — l'onglet du navigateur le compose lui-même — tandis que l'icône iOS reçoit un fond blanc opaque : un PNG transparent y serait composé sur du noir, où le bleu marine de la toque disparaîtrait.
+
+**Pourquoi un verrouillage compact.** La baseline « QUIZZES FOR A BRIGHTER YOU » mesure 35 px sur une source de 456 de haut. Affichée à 30 px dans la barre de navigation, elle tombe sous les 3 px et se réduit à une bavure. Le script détecte donc la baseline par analyse des bandes horizontales, la retire, et recompose pictogramme et mot-symbole côte à côte. Le verrouillage complet reste réservé aux grands formats.
+
+**Deux fichiers plutôt qu'un filtre CSS.** Le bleu marine du mot-symbole serait illisible sur fond sombre, et un filtre d'inversion emporterait aussi le turquoise et le gris clair de la baseline. La variante sombre applique `L' = max(L, 1 − L)` à chaque pixel : aucun ne reste sombre, mais teinte et saturation sont conservées.
+
+La bascule suit le réglage système **et** le choix manuel du visiteur, dans les deux sens : un thème clair imposé sur une machine en sombre affiche bien le logo clair.
+
+La source haute définition vit dans `design/`, exclue du déploiement. Pour régénérer toutes les déclinaisons après avoir modifié le logo :
+
+```bash
+pip install Pillow          # dépendance du script uniquement, pas de l'application
+python3 outils/logo.py
+```
+
+L'ensemble des visuels pèse 49 Ko.
 
 ### Pourquoi une interrogation périodique et pas de WebSocket
 
