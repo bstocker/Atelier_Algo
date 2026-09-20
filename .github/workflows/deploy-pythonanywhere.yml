@@ -9,6 +9,21 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    # Secrets are exposed as environment variables rather than interpolated
+    # into the scripts below. Two reasons:
+    #   - `${{ secrets.X }}` is substituted before bash runs, so an empty
+    #     secret silently becomes an empty literal and `set -u` never fires;
+    #   - a secret containing a quote or a `;` would be executed as code.
+    # Referenced as "$PA_USERNAME" etc., the shell sees plain data.
+    env:
+      PA_USERNAME: ${{ secrets.PA_USERNAME }}
+      PA_TOKEN: ${{ secrets.PA_TOKEN }}
+      PA_TARGET_DIR: ${{ secrets.PA_TARGET_DIR }}
+      PA_WEBAPP_DOMAIN: ${{ secrets.PA_WEBAPP_DOMAIN }}
+      # Optional: set the PA_HOST secret to "eu.pythonanywhere.com" if your
+      # account is on the EU cluster.
+      PA_HOST: ${{ secrets.PA_HOST }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -17,23 +32,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          : "${{ secrets.PA_USERNAME }}"
-          : "${{ secrets.PA_TOKEN }}"
-          : "${{ secrets.PA_TARGET_DIR }}"
-          : "${{ secrets.PA_WEBAPP_DOMAIN }}"
+
+          missing=()
+          for name in PA_USERNAME PA_TOKEN PA_TARGET_DIR PA_WEBAPP_DOMAIN; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Secret(s) manquant(s) ou vide(s) : ${missing[*]}"
+            echo "A creer dans Settings -> Secrets and variables -> Actions -> New repository secret."
+            exit 1
+          fi
+
+          # Format checks: these two mistakes produce a malformed API URL and
+          # an error message that says nothing useful.
+          if [[ "$PA_TARGET_DIR" != /* ]]; then
+            echo "::error::PA_TARGET_DIR doit etre un chemin absolu, par exemple /home/monuser/myapp (valeur recue : ${PA_TARGET_DIR})"
+            exit 1
+          fi
+          if [[ "$PA_WEBAPP_DOMAIN" == *://* || "$PA_WEBAPP_DOMAIN" == */* ]]; then
+            echo "::error::PA_WEBAPP_DOMAIN doit etre un nom de domaine seul, sans https:// ni chemin, par exemple monuser.pythonanywhere.com (valeur recue : ${PA_WEBAPP_DOMAIN})"
+            exit 1
+          fi
+
+          echo "Les 4 secrets requis sont presents et bien formes."
 
       - name: Upload all files recursively (dirs auto-created by Files API)
         shell: bash
         run: |
           set -euo pipefail
-          USER="${{ secrets.PA_USERNAME }}"
-          TOKEN="${{ secrets.PA_TOKEN }}"
-          TARGET_DIR="${{ secrets.PA_TARGET_DIR }}"
-          DOMAIN="${{ secrets.PA_WEBAPP_DOMAIN }}"
 
-          # Optional: set PA_HOST secret to "eu.pythonanywhere.com" if your account is on EU.
-          HOST="${{ secrets.PA_HOST }}"
-          if [[ -z "${HOST}" ]]; then HOST="www.pythonanywhere.com"; fi
+          HOST="${PA_HOST:-}"
+          if [[ -z "$HOST" ]]; then HOST="www.pythonanywhere.com"; fi
+
+          # Trailing slashes would produce a double slash in the API path.
+          TARGET_DIR="${PA_TARGET_DIR%/}"
 
           echo "Using PythonAnywhere host: ${HOST}"
           echo "Target directory: ${TARGET_DIR}"
@@ -52,9 +85,9 @@ jobs:
             echo " - ${rel} -> ${remote_path}"
 
             curl -sS --fail -X POST \
-              -H "Authorization: Token ${TOKEN}" \
+              -H "Authorization: Token ${PA_TOKEN}" \
               -F "content=@${file}" \
-              "https://${HOST}/api/v0/user/${USER}/files/path${remote_path}" \
+              "https://${HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}" \
               >/dev/null
 
           done < <(
@@ -66,10 +99,10 @@ jobs:
                 -print0
           )
 
-          echo "Reloading webapp ${DOMAIN}..."
+          echo "Reloading webapp ${PA_WEBAPP_DOMAIN}..."
           curl -sS --fail -X POST \
-            -H "Authorization: Token ${TOKEN}" \
-            "https://${HOST}/api/v0/user/${USER}/webapps/${DOMAIN}/reload/" \
+            -H "Authorization: Token ${PA_TOKEN}" \
+            "https://${HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/" \
             >/dev/null
 
-          echo "Deployed. Try: https://${DOMAIN}/"
+          echo "Deployed. Try: https://${PA_WEBAPP_DOMAIN}/"
