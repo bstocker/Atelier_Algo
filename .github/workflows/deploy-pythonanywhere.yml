@@ -62,6 +62,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          RESP="$(mktemp)"
+          trap 'rm -f "$RESP"' EXIT
+
           HOST="${PA_HOST:-}"
           if [[ -z "$HOST" ]]; then HOST="www.pythonanywhere.com"; fi
 
@@ -84,11 +87,18 @@ jobs:
             remote_path="${TARGET_DIR}/${rel}"
             echo " - ${rel} -> ${remote_path}"
 
-            curl -sS --fail -X POST \
+            # No --fail here: it hides the response body, and the body is the
+            # only place the API explains what it refused.
+            status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
               -H "Authorization: Token ${PA_TOKEN}" \
               -F "content=@${file}" \
-              "https://${HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}" \
-              >/dev/null
+              "https://${HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}")"
+
+            if [[ "$status" != 2* ]]; then
+              echo "::error::Envoi de ${rel} refuse (HTTP ${status})"
+              echo "Reponse de l'API :"; cat "$RESP"; echo
+              exit 1
+            fi
 
           done < <(
             find . \
@@ -100,9 +110,33 @@ jobs:
           )
 
           echo "Reloading webapp ${PA_WEBAPP_DOMAIN}..."
-          curl -sS --fail -X POST \
-            -H "Authorization: Token ${PA_TOKEN}" \
-            "https://${HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/" \
-            >/dev/null
+
+          # A 409 often just means a reload is already running, so retry a few
+          # times before giving up. Any other status is final.
+          status=""
+          for attempt in 1 2 3; do
+            status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
+              -H "Authorization: Token ${PA_TOKEN}" \
+              "https://${HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/")"
+
+            if [[ "$status" == 2* ]]; then break; fi
+
+            echo "Tentative ${attempt}/3 : HTTP ${status}"
+            echo "Reponse de l'API :"; cat "$RESP"; echo
+            if [[ "$status" != "409" ]]; then break; fi
+            sleep 10
+          done
+
+          if [[ "$status" != 2* ]]; then
+            echo "::error::Rechargement de la webapp refuse (HTTP ${status})"
+            case "$status" in
+              403) echo "Cause probable : PA_TOKEN invalide ou revoque (PythonAnywhere -> Account -> API Token)." ;;
+              404) echo "Cause probable : PA_WEBAPP_DOMAIN ne correspond a aucune webapp. Valeur attendue : monuser.pythonanywhere.com" ;;
+              409) echo "Cause probable : la webapp est expiree. Sur un compte gratuit, PythonAnywhere la desactive tous les 3 mois."
+                   echo "Allez dans l'onglet Web et cliquez sur le bouton 'Run until 3 months from today', puis relancez ce workflow." ;;
+            esac
+            echo "Les fichiers ont bien ete envoyes : seul le rechargement a echoue."
+            exit 1
+          fi
 
           echo "Deployed. Try: https://${PA_WEBAPP_DOMAIN}/"
