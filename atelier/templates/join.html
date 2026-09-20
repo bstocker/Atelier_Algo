@@ -8,9 +8,15 @@
   <img class="hero-logo dark"
        src="{{ url_for('static', filename='img/logo-evalio-dark.png') }}"
        alt="Evalio — quizzes for a brighter you" width="560" height="162">
+  {% if room %}
+  <h1>{{ room['title'] }}</h1>
+  <p class="muted">Identifiez-vous avec votre nom et votre prénom pour
+     rejoindre cette session.</p>
+  {% else %}
   <h1>Rejoindre une session</h1>
   <p class="muted">Identifiez-vous avec votre nom et votre prénom, puis saisissez
      le code affiché par l'enseignant.</p>
+  {% endif %}
 
   {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
 
@@ -21,10 +27,14 @@
     <label>Nom
       <input name="last_name" required autocomplete="family-name" maxlength="60">
     </label>
+    {% if room %}
+    <input type="hidden" name="code" value="{{ room['code'] }}">
+    {% else %}
     <label>Code de la session
       <input name="code" required maxlength="12" class="mono code-input"
              placeholder="ABC123" autocapitalize="characters" spellcheck="false">
     </label>
+    {% endif %}
     <button type="submit" class="primary">Commencer</button>
   </form>
 

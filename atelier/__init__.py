@@ -3,6 +3,7 @@
 import os
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import db
 
@@ -56,6 +57,7 @@ def create_app(config=None):
         ),
         ADMIN_USER=os.environ.get("ATELIER_ADMIN_USER", "admin"),
         ADMIN_PASSWORD=os.environ.get("ATELIER_ADMIN_PASSWORD", "atelier"),
+        TRUST_PROXY=os.environ.get("ATELIER_TRUST_PROXY", "1") != "0",
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_HTTPONLY=True,
         JSON_SORT_KEYS=False,
@@ -72,6 +74,12 @@ def create_app(config=None):
             "ATELIER_SECRET_KEY non defini : les sessions sont signees avec "
             "une cle publique connue. A definir avant toute mise en service."
         )
+
+    # PythonAnywhere sert l'application derriere un proxy qui termine le TLS.
+    # Sans cela, url_for(..., _external=True) fabriquerait des liens en http,
+    # et c'est precisement ce lien que l'enseignant transmet a sa classe.
+    if app.config["TRUST_PROXY"]:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
     db.init_db(app)
     app.teardown_appcontext(db.close_db)

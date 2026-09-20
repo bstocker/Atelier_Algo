@@ -52,10 +52,15 @@ class AtelierTest(unittest.TestCase):
         return client, resp
 
     def solve(self, client, key):
+        """Soumet la bonne reponse, quel que soit le mode de l'exercice."""
         task = client.get("/api/task/" + key).get_json()
-        ref = dict(ex.PATTERNS[key].ref)
-        return client.post("/api/task/%s/check" % key,
-                           json={"selection": ref}).get_json()
+        pattern = ex.PATTERNS[key]
+        if pattern.mode == "predict":
+            attendu = ex.target_rows(key, task["params"])
+            body = {"answer": "\n".join(attendu)}
+        else:
+            body = {"selection": dict(pattern.ref)}
+        return client.post("/api/task/%s/check" % key, json=body).get_json()
 
     # -- tests -------------------------------------------------------------
 
@@ -281,6 +286,95 @@ class AtelierTest(unittest.TestCase):
                           json={"selection": {"stars": "a"}}).get_json()
         self.assertIsNone(res["trace"])
 
+    def test_predict_never_sends_the_expected_output(self):
+        _, code = self.make_session(patterns=("predire_triangle",))
+        client, _ = self.join(code)
+        task = client.get("/api/task/predire_triangle").get_json()
+        self.assertEqual(task["mode"], "predict")
+        self.assertIsNone(task["target"])
+        self.assertNotIn("blanks", task)
+
+        attendu = ex.target_rows("predire_triangle", task["params"])
+        res = client.post("/api/task/predire_triangle/check",
+                          json={"answer": "n'importe quoi"}).get_json()
+        self.assertFalse(res["ok"])
+        self.assertNotIn("target", res)
+        # Aucune ligne attendue ne doit transiter, ni le nombre de lignes.
+        self.assertTrue(all("want" not in d for d in res["diff"]))
+        self.assertEqual(len(res["diff"]), 1)
+        self.assertTrue(res["count_mismatch"])
+        self.assertNotIn("\n".join(attendu), json.dumps(res))
+
+    def test_predict_reveals_the_output_once_found(self):
+        _, code = self.make_session(patterns=("predire_magique",))
+        client, _ = self.join(code)
+        res = self.solve(client, "predire_magique")
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["target"], res["rows"])
+
+    def test_predict_ignores_trailing_blank_lines(self):
+        _, code = self.make_session(patterns=("predire_triangle",))
+        client, _ = self.join(code)
+        params = client.get("/api/task/predire_triangle").get_json()["params"]
+        attendu = ex.target_rows("predire_triangle", params)
+        res = client.post("/api/task/predire_triangle/check",
+                          json={"answer": "\r\n".join(attendu) + "\r\n\n  \n"}).get_json()
+        self.assertTrue(res["ok"])
+
+    def test_empty_prediction_is_not_an_attempt(self):
+        _, code = self.make_session(patterns=("predire_triangle",))
+        client, _ = self.join(code)
+        res = client.post("/api/task/predire_triangle/check",
+                          json={"answer": "   \n\n"}).get_json()
+        self.assertFalse(res["complete"])
+        self.assertEqual(client.get("/api/task/predire_triangle")
+                         .get_json()["attempts"], 0)
+
+    def test_infinite_loop_is_reported_not_crashed(self):
+        _, code = self.make_session(patterns=("tantque",))
+        client, _ = self.join(code)
+        res = client.post("/api/task/tantque/check",
+                          json={"selection": {"incr": "d"}}).get_json()
+        self.assertTrue(res["complete"])
+        self.assertTrue(res["infinite"])
+        self.assertFalse(res["ok"])
+        self.assertTrue(res["trace"][-1]["infinite"])
+        self.assertTrue(res["trace"][-1]["vrai"])   # le test reste vrai
+
+    def test_joining_by_url_needs_no_code(self):
+        session_id, code = self.make_session(patterns=("ligne",))
+        page = self.app.test_client().get("/s/" + code)
+        self.assertEqual(page.status_code, 200)
+        html = page.get_data(as_text=True)
+        self.assertIn('name="code" value="%s"' % code, html)
+        self.assertNotIn("code-input", html)   # pas de champ a saisir
+
+        client = self.app.test_client()
+        resp = client.post("/join", data={
+            "first_name": "Ada", "last_name": "Lovelace", "code": code})
+        self.assertTrue(resp.headers["Location"].endswith("/exercice"))
+
+    def test_join_url_rejects_unknown_or_closed_sessions(self):
+        session_id, code = self.make_session(patterns=("ligne",))
+        resp = self.app.test_client().get("/s/ZZZZZZ")
+        self.assertIn("error=", resp.headers["Location"])
+
+        self.admin.post("/admin/sessions/%d/close" % session_id)
+        resp = self.app.test_client().get("/s/" + code)
+        self.assertIn("error=", resp.headers["Location"])
+
+    def test_admin_page_shows_the_shareable_link(self):
+        session_id, code = self.make_session(patterns=("ligne",))
+        html = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        self.assertIn("/s/" + code, html)
+
+    def test_dashboard_groups_exercises_by_level(self):
+        html = self.admin.get("/admin/").get_data(as_text=True)
+        for label in ex.LEVELS.values():
+            self.assertIn(label, html)
+        self.assertIn('data-level="1"', html)
+
     def test_unknown_pattern_is_404(self):
         _, code = self.make_session(patterns=("carre",))
         client, _ = self.join(code)
@@ -370,6 +464,34 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(scoring.final_score(0, 0, 0), 0.0)
 
 
+class TraceConsistencyTest(unittest.TestCase):
+    """La trace doit raconter exactement ce que produit la sortie."""
+
+    def test_last_step_matches_the_produced_output(self):
+        for key, pattern in ex.PATTERNS.items():
+            if pattern.trace is None:
+                continue
+            name, lo, hi = pattern.dim
+            blank_id = list(pattern.blanks)[0]
+            for size in range(lo, hi + 1):
+                params = {name: size}
+                for option in pattern.blanks[blank_id][1]:
+                    selection = {blank_id: option.id}
+                    with self.subTest(pattern=key, taille=size, choix=option.c):
+                        steps = ex.build_trace(key, params, selection)
+                        try:
+                            rows = ex.build_rows(key, params, selection)
+                        except ex.InfiniteLoop:
+                            self.assertTrue(steps[-1]["infinite"])
+                            continue
+                        self.assertFalse(steps[-1].get("infinite", False))
+                        self.assertEqual(steps[-1]["sortie"], rows[0].rstrip())
+
+    def test_every_level_is_named(self):
+        for pattern in ex.PATTERNS.values():
+            self.assertIn(pattern.level, ex.LEVELS, pattern.key)
+
+
 class SubstituteTest(unittest.TestCase):
 
     def test_variables_are_replaced_by_their_values(self):
@@ -385,6 +507,8 @@ class PatternTest(unittest.TestCase):
 
     def test_reference_output_is_unique_per_blank(self):
         for key, pattern in ex.PATTERNS.items():
+            if not pattern.blanks:      # mode prediction : aucun menu
+                continue
             name, lo, hi = pattern.dim or pattern.value
             for size in range(lo, hi + 1):
                 params = {name: size}
@@ -397,6 +521,8 @@ class PatternTest(unittest.TestCase):
                         selection[blank_id] = opt.id
                         try:
                             produced = ex.build_rows(key, params, selection)
+                        except ex.InfiniteLoop:
+                            continue    # ne peut pas coincider avec la cible
                         except (ValueError, ZeroDivisionError):
                             continue
                         ok, _ = ex.compare(produced, target)

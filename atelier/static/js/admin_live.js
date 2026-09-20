@@ -19,7 +19,7 @@
     lab.className = "tile-label";
     lab.textContent = label;
     var val = document.createElement("div");
-    val.className = "tile-value";
+    val.className = value === "\u2014" ? "tile-value empty" : "tile-value";
     val.textContent = value;
     if (unit) {
       var u = document.createElement("span");

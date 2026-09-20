@@ -37,8 +37,8 @@
       <ul id="lesson-list"></ul>
     </aside>
 
-    <div class="grid2">
-      <div>
+    <div class="grid2" id="panes">
+      <div id="target-pane">
         <h3>Motif à reproduire</h3>
         <pre class="ascii" id="target"></pre>
       </div>
@@ -48,10 +48,20 @@
       </div>
     </div>
 
-    <h3>Code à compléter</h3>
+    <h3 id="code-title">Code à compléter</h3>
     <pre class="code" id="code"></pre>
 
     <div id="blanks" class="blanks"></div>
+
+    <!-- Mode « prédire la sortie » : aucun menu, l'élève écrit le résultat -->
+    <div id="predict-box" hidden>
+      <h3>Votre prédiction</h3>
+      <p class="hint">Une ligne par ligne de sortie. Les espaces du début
+         comptent ; ceux de fin sont ignorés.</p>
+      <textarea id="predict-input" rows="8" spellcheck="false"
+                aria-label="Sortie attendue"
+                placeholder="Écrivez ici la sortie que produit ce code…"></textarea>
+    </div>
 
     <!-- Trace du choix courant, renvoyee par le serveur a la compilation -->
     <section id="trace-box" hidden>

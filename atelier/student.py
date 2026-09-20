@@ -78,6 +78,31 @@ def join_form():
     return render_template("join.html", error=request.args.get("error"))
 
 
+@bp.get("/s/<code>")
+def join_by_code(code):
+    """Lien distribue par l'enseignant : le code est deja dans l'URL."""
+    room = query("SELECT * FROM session WHERE code = ?",
+                 (code.strip().upper()[:12],), one=True)
+    if room is None:
+        return redirect(url_for("student.join_form",
+                                error="Ce lien ne correspond à aucune session."))
+    if room["status"] == "draft":
+        return redirect(url_for("student.join_form",
+                                error="Cette session n'est pas encore ouverte."))
+    if room["status"] == "closed":
+        return redirect(url_for("student.join_form",
+                                error="Cette session est terminée."))
+
+    student = current_student()
+    if student and student["session_id"] == room["id"]:
+        if student["finished_at"]:
+            return redirect(url_for("student.done_page"))
+        return redirect(url_for("student.exercise_page"))
+
+    return render_template("join.html", room=room,
+                           error=request.args.get("error"))
+
+
 @bp.post("/join")
 def join():
     first = " ".join(request.form.get("first_name", "").split())[:60]
@@ -201,6 +226,7 @@ def api_me():
         "tasks": [{
             "key": t["pattern_key"],
             "name": ex.PATTERNS[t["pattern_key"]].name,
+            "level": ex.PATTERNS[t["pattern_key"]].level,
             "solved": bool(t["solved"]),
             "attempts": t["attempts"],
         } for t in rows],
@@ -219,22 +245,37 @@ def api_task(key):
 
     pattern = ex.PATTERNS[key]
     params = json.loads(task["params"])
-    selection = json.loads(task["selection"])
-    return jsonify({
+    stored = json.loads(task["selection"])
+    solved = bool(task["solved"])
+
+    payload = {
         "key": key,
         "name": pattern.name,
         "brief": pattern.brief,
         "why": pattern.why,
+        "mode": pattern.mode,
+        "level": pattern.level,
+        "level_name": ex.LEVELS[pattern.level],
         "params": params,
         "lesson": list(pattern.lesson),
-        "target": ex.target_rows(key, params),
-        "code": ex.render_code(key, params, selection),
-        "code_template": ex.code_template(key, params),
-        "blanks": ex.shuffled_blanks(key, student["token"]),
-        "selection": selection,
-        "solved": bool(task["solved"]),
+        "solved": solved,
         "attempts": task["attempts"],
-    })
+    }
+
+    if pattern.mode == "predict":
+        # La cible est la reponse : elle ne descend qu'une fois trouvee.
+        payload["code"] = ex.render_code(key, params)
+        payload["answer"] = stored.get("answer", "")
+        payload["target"] = ex.target_rows(key, params) if solved else None
+        payload["lines"] = None
+    else:
+        payload["target"] = ex.target_rows(key, params)
+        payload["code"] = ex.render_code(key, params, stored)
+        payload["code_template"] = ex.code_template(key, params)
+        payload["blanks"] = ex.shuffled_blanks(key, student["token"])
+        payload["selection"] = stored
+
+    return jsonify(payload)
 
 
 @bp.post("/api/task/<key>/check")
@@ -252,46 +293,80 @@ def api_check(key):
 
     pattern = ex.PATTERNS[key]
     payload = request.get_json(silent=True) or {}
-    raw = payload.get("selection") or {}
-    valid_ids = {b: {o.id for o in opts}
-                 for b, (_lbl, opts) in pattern.blanks.items()}
-    selection = {b: raw.get(b) for b in pattern.blanks
-                 if raw.get(b) in valid_ids[b]}
-
     params = json.loads(task["params"])
-    execute("UPDATE task SET selection = ? WHERE id = ?",
-            (json.dumps(selection), task["id"]))
-
-    if len(selection) < len(pattern.blanks):
-        touch(student["id"])
-        return jsonify({"complete": False, "ok": False,
-                        "code": ex.render_code(key, params, selection),
-                        "message": "Complétez tous les menus."})
-
-    produced = ex.build_rows(key, params, selection)
-    ok, diff = ex.compare(produced, ex.target_rows(key, params))
-    # La trace deroule le choix de l'eleve, pas la reponse attendue : une
-    # condition fausse produit une trace fausse, et c'est la qu'on la voit.
-    trace = ex.build_trace(key, params, selection)
-
+    target = ex.target_rows(key, params)
     already = bool(task["solved"])
+
+    if pattern.mode == "predict":
+        answer = (payload.get("answer") or "")[:4000]
+        execute("UPDATE task SET selection = ? WHERE id = ?",
+                (json.dumps({"answer": answer}), task["id"]))
+        produced = answer.replace("\r\n", "\n").split("\n")
+        while produced and not produced[-1].strip():
+            produced.pop()
+        if not produced:
+            touch(student["id"])
+            return jsonify({"complete": False, "ok": False,
+                            "message": "Écrivez la sortie attendue."})
+        ok, diff = ex.compare(produced, target)
+        trace, infinite = None, False
+    else:
+        raw = payload.get("selection") or {}
+        valid = {b: {o.id for o in opts}
+                 for b, (_lbl, opts) in pattern.blanks.items()}
+        selection = {b: raw.get(b) for b in pattern.blanks
+                     if raw.get(b) in valid[b]}
+        execute("UPDATE task SET selection = ? WHERE id = ?",
+                (json.dumps(selection), task["id"]))
+
+        if len(selection) < len(pattern.blanks):
+            touch(student["id"])
+            return jsonify({"complete": False, "ok": False,
+                            "code": ex.render_code(key, params, selection),
+                            "message": "Complétez tous les menus."})
+
+        # La trace deroule le choix de l'eleve, pas la reponse attendue : une
+        # condition fausse produit une trace fausse, et c'est la qu'on la voit.
+        trace = ex.build_trace(key, params, selection)
+        try:
+            produced = ex.build_rows(key, params, selection)
+            infinite = False
+        except ex.InfiniteLoop:
+            produced, infinite = [], True
+        ok, diff = (False, []) if infinite else ex.compare(produced, target)
+
     execute("UPDATE task SET attempts = attempts + 1 WHERE id = ?", (task["id"],))
     if ok and not already:
         execute("UPDATE task SET solved = 1, solved_at = ? WHERE id = ?",
                 (now(), task["id"]))
     touch(student["id"])
-
     student = current_student()  # relit les compteurs a jour
-    return jsonify({
+
+    body = {
         "complete": True,
         "ok": ok,
         "rows": produced,
-        "diff": diff,
         "trace": trace,
-        "code": ex.render_code(key, params, selection),
+        "infinite": infinite,
         "first_time": ok and not already,
         "progress": progress_of(student),
-    })
+    }
+
+    if pattern.mode == "predict":
+        if ok:
+            body["diff"] = diff
+            body["target"] = target      # revelee seulement une fois trouvee
+        else:
+            # Ne rien reveler : verdict ligne a ligne sur ce que l'eleve a
+            # ecrit, sans le contenu attendu ni le nombre de lignes cibles.
+            body["diff"] = [{"line": d["line"], "ok": d["ok"], "got": d["got"]}
+                            for d in diff if d["got"] is not None]
+            body["count_mismatch"] = len(produced) != len(target)
+    else:
+        body["diff"] = diff
+        body["code"] = ex.render_code(key, params, selection)
+
+    return jsonify(body)
 
 
 @bp.post("/api/incident")

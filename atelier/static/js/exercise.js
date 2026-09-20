@@ -17,6 +17,11 @@
     output: document.getElementById("output"),
     code: document.getElementById("code"),
     blanks: document.getElementById("blanks"),
+    panes: document.getElementById("panes"),
+    targetPane: document.getElementById("target-pane"),
+    codeTitle: document.getElementById("code-title"),
+    predictBox: document.getElementById("predict-box"),
+    predictInput: document.getElementById("predict-input"),
     lesson: document.getElementById("lesson"),
     lessonList: document.getElementById("lesson-list"),
     traceBox: document.getElementById("trace-box"),
@@ -212,35 +217,71 @@
     el.traceBox.hidden = false;
   }
 
+  function applyMode(data) {
+    var predict = data.mode === "predict";
+
+    el.predictBox.hidden = !predict;
+    el.blanks.hidden = predict;
+    // La cible EST la réponse en mode prédiction : son volet ne réapparaît
+    // qu'une fois l'exercice trouvé.
+    el.targetPane.hidden = predict && !data.target;
+    el.panes.classList.toggle("single", predict && !data.target);
+    el.codeTitle.textContent = predict ? "Code à lire" : "Code à compléter";
+    el.check.textContent = predict ? "Vérifier ma prédiction"
+                                   : "Compiler et exécuter";
+    el.output.textContent = predict
+      ? "Écrivez votre prédiction puis vérifiez."
+      : "Complétez les menus puis compilez.";
+
+    if (predict) {
+      el.predictInput.value = data.answer || "";
+      el.predictInput.readOnly = !!data.solved;
+      el.code.textContent = data.code;
+    }
+  }
+
   function loadTask(key) {
     return api("/api/task/" + encodeURIComponent(key)).then(function (data) {
       current = data;
-      selection = Object.assign({}, data.selection);
+      selection = Object.assign({}, data.selection || {});
       el.name.textContent = data.name;
       el.brief.textContent = data.brief + " — " + data.why;
       el.state.textContent = data.solved
         ? "✓ réussi" : "en cours · " + data.attempts + " tentative"
           + (data.attempts > 1 ? "s" : "");
       el.state.className = data.solved ? "pill ok" : "pill";
-      renderLines(el.target, data.target);
-      el.output.textContent = "Complétez les menus puis compilez.";
       el.feedback.textContent = "";
       el.feedback.className = "feedback";
+
+      applyMode(data);
+      if (data.target) renderLines(el.target, data.target);
       renderLesson(data.lesson);
       renderTrace(null);
-      renderBlanks();
-      renderCode();
+      if (data.mode !== "predict") {
+        renderBlanks();
+        renderCode();
+      }
       renderNav();
     });
   }
 
   // --- Actions ------------------------------------------------------------
 
+  // En prédiction, Ctrl+Entrée valide sans quitter la zone de saisie.
+  el.predictInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      el.check.click();
+    }
+  });
+
   el.check.addEventListener("click", function () {
     if (!current) return;
     el.check.disabled = true;
-    postJSON("/api/task/" + encodeURIComponent(current.key) + "/check",
-             { selection: selection })
+    var body = current.mode === "predict"
+      ? { answer: el.predictInput.value }
+      : { selection: selection };
+    postJSON("/api/task/" + encodeURIComponent(current.key) + "/check", body)
       .then(function (res) {
         if (!res.complete) {
           renderTrace(null);
@@ -248,9 +289,25 @@
           el.feedback.className = "feedback ko";
           return;
         }
+        if (res.infinite) {
+          el.output.textContent = "Cette boucle ne s'arrête jamais : "
+            + "aucune sortie à comparer.";
+          renderTrace(res.trace);
+          el.feedback.textContent = "Boucle infinie. Regardez le tableau : "
+            + "le test reste vrai tour après tour.";
+          el.feedback.className = "feedback ko";
+          showProgress(res.progress);
+          return;
+        }
+
         var marks = res.diff.map(function (d) { return d.ok; });
         renderLines(el.output, res.diff.map(function (d) { return d.got; }), marks);
         renderTrace(res.trace);
+        if (res.target) {          // prédiction trouvée : la cible se dévoile
+          el.targetPane.hidden = false;
+          el.panes.classList.remove("single");
+          renderLines(el.target, res.target);
+        }
         if (res.ok) {
           el.feedback.textContent = res.first_time
             ? "Exact. Motif validé."
@@ -258,6 +315,7 @@
           el.feedback.className = "feedback ok";
           el.state.textContent = "✓ réussi";
           el.state.className = "pill ok";
+          if (current.mode === "predict") el.predictInput.readOnly = true;
           tasks.forEach(function (t) { if (t.key === current.key) t.solved = true; });
           renderNav();
         } else {
@@ -265,8 +323,12 @@
           el.state.textContent = "en cours · " + current.attempts + " tentative"
             + (current.attempts > 1 ? "s" : "");
           var wrong = res.diff.filter(function (d) { return !d.ok; }).length;
-          el.feedback.textContent = wrong + " ligne" + (wrong > 1 ? "s" : "")
+          var message = wrong + " ligne" + (wrong > 1 ? "s" : "")
             + " différente" + (wrong > 1 ? "s" : "") + " de la cible.";
+          if (res.count_mismatch) {
+            message += " Le nombre de lignes ne correspond pas non plus.";
+          }
+          el.feedback.textContent = message;
           el.feedback.className = "feedback ko";
         }
         showProgress(res.progress);

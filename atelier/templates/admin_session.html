@@ -13,7 +13,10 @@
   <div class="panel-head">
     <div>
       <h1>{{ room['title'] }}</h1>
-      <p class="muted">{{ pattern_names|join(' · ') }}</p>
+      <p class="muted">
+        {% for m in motifs %}<span class="chip lvl{{ m.level }}"
+           title="Niveau : {{ levels[m.level] }}">{{ m.name }}</span>{% endfor %}
+      </p>
     </div>
     <div class="session-actions">
       {% if room['status'] == 'draft' %}
@@ -38,13 +41,19 @@
   {% endif %}
 
   <div class="joinbox">
-    <div>
-      <span class="joinbox-label">Code à dicter</span>
-      <span class="joincode mono">{{ room['code'] }}</span>
+    <div class="joinbox-link">
+      <span class="joinbox-label">Lien à transmettre</span>
+      <div class="linkrow">
+        <input class="mono" id="join-url" value="{{ join_url }}" readonly
+               onfocus="this.select()">
+        <button type="button" class="primary" id="copy-url">Copier</button>
+      </div>
+      <p class="hint">Le code est dans le lien : l'étudiant n'a que son nom
+         et son prénom à saisir.</p>
     </div>
     <div>
-      <span class="joinbox-label">Adresse</span>
-      <span class="mono">{{ join_url }}</span>
+      <span class="joinbox-label">Code, si vous le dictez</span>
+      <span class="joincode mono">{{ room['code'] }}</span>
     </div>
   </div>
 </div>
@@ -69,4 +78,25 @@
   window.LIVE_URL = "{{ url_for('admin.api_live', session_id=room['id']) }}";
 </script>
 <script src="{{ url_for('static', filename='js/admin_live.js') }}"></script>
+<script>
+  // Copie du lien de session. document.execCommand sert de repli : l'API
+  // presse-papiers exige un contexte securise, absent en http local.
+  document.getElementById("copy-url").addEventListener("click", function () {
+    var input = document.getElementById("join-url");
+    var btn = this;
+    input.select();
+    var done = function () {
+      btn.textContent = "Copié";
+      setTimeout(function () { btn.textContent = "Copier"; }, 1800);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(input.value).then(done, function () {
+        document.execCommand("copy"); done();
+      });
+    } else {
+      document.execCommand("copy");
+      done();
+    }
+  });
+</script>
 {% endblock %}

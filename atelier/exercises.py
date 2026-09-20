@@ -16,6 +16,22 @@ import re
 
 BLANK_PLACEHOLDER = "__________"
 
+# Niveaux de difficulte, affiches a l'enseignant quand il compose sa session.
+LEVELS = {
+    1: "Découverte",
+    2: "Facile",
+    3: "Moyen",
+    4: "Avancé",
+}
+
+
+class InfiniteLoop(Exception):
+    """La selection de l'eleve produit une boucle qui ne s'arrete jamais."""
+
+
+def _never_ends(_ctx):
+    raise InfiniteLoop()
+
 
 @dataclass(frozen=True)
 class Option:
@@ -38,6 +54,8 @@ class Pattern:
     value: tuple = None                   # (nom, mini, maxi) saisi au clavier
     trace: Callable = None                # (params, get, text) -> list[dict]
     lesson: tuple = ()                    # points a retenir, affiches en tete
+    level: int = 2                        # cle de LEVELS
+    mode: str = "complete"                # complete | predict
 
 
 def _opts(*triples):
@@ -60,41 +78,93 @@ def substitute(expression, values):
 
 
 # --------------------------------------------------------------------------
-# 0. Une ligne d'etoiles — l'exercice d'entree
+# Trace des boucles simples
 # --------------------------------------------------------------------------
 
-def _ligne_trace(p, get, text):
-    """Deroule la boucle tour par tour, pour la selection courante.
+TRACE_CAP = 40          # garde-fou d'affichage
+INFINITE_PREVIEW = 6    # tours montres avant de conclure a une boucle infinie
 
-    C'est la trace de ce que fait l'eleve, pas celle de la bonne reponse :
-    une condition fausse produit une trace fausse, et c'est precisement la
-    qu'on voit pourquoi.
+
+def _unroll(condition, tours, infinite, first, advance, emit, action, n):
+    """Deroule une boucle a un compteur et rend les lignes de la trace.
+
+    `condition` est deja sous forme de texte C ; les valeurs y sont
+    substituees a chaque tour pour que l'eleve voie le test tel qu'il est
+    evalue, et non sa forme abstraite.
     """
-    n = p["n"]
-    condition = text("etoiles")
-    tours = min(get("etoiles")({"n": n}), 40)   # garde-fou d'affichage
-
-    steps, sortie = [], ""
-    for j in range(tours):
-        sortie += "*"
+    steps, sortie, j = [], "", first
+    for tour in range(min(tours, TRACE_CAP)):
+        sortie += emit(j)
         steps.append({
-            "tour": j + 1,
+            "tour": tour + 1,
             "j": j,
             "test": substitute(condition, {"j": j, "n": n}),
             "vrai": True,
-            "action": 'printf("*")  puis  j++',
-            "sortie": sortie,
+            "action": action,
+            "sortie": sortie.rstrip(),
         })
+        j = advance(j)
+
     steps.append({
         "tour": None,
-        "j": tours,
-        "test": substitute(condition, {"j": tours, "n": n}),
-        "vrai": False,
-        "action": "le test est faux : on sort de la boucle",
-        "sortie": sortie,
+        "j": j,
+        "test": substitute(condition, {"j": j, "n": n}),
+        "vrai": infinite,
+        "action": ("le test reste vrai : la boucle ne s'arrête jamais"
+                   if infinite else "le test est faux : on sort de la boucle"),
+        "sortie": sortie.rstrip(),
+        "infinite": infinite,
     })
     return steps
 
+
+def condition_trace(blank_id, first, delta, step_label):
+    """Trace des boucles dont le trou est la condition, le pas etant fixe."""
+    def trace(params, get, text):
+        n = params["n"]
+        return _unroll(
+            condition=text(blank_id),
+            tours=get(blank_id)({"n": n}),
+            infinite=False,
+            first=first(n),
+            advance=lambda j: j + delta,
+            emit=lambda _j: "*",
+            action='printf("*")  puis  %s' % step_label,
+            n=n,
+        )
+    return trace
+
+
+def step_trace(blank_id, condition, deltas, emit, action):
+    """Trace des boucles dont le trou est le pas, la condition etant fixe.
+
+    `deltas` associe le texte C de chaque option a son deplacement. Le nombre
+    de tours se deduit du deplacement, et non de la fonction du menu : selon
+    les motifs celle-ci rend tantot un pas, tantot un compte. Un deplacement
+    nul ou negatif n'approche jamais la sortie : la boucle est infinie.
+    """
+    def trace(params, get, text):
+        n = params["n"]
+        choix = text(blank_id)
+        delta = deltas[choix](n)
+        infinite = delta <= 0
+        tours = INFINITE_PREVIEW if infinite else -(-n // delta)
+        return _unroll(
+            condition=condition,
+            tours=tours,
+            infinite=infinite,
+            first=0,
+            advance=lambda j: j + delta,
+            emit=emit,
+            action="%s  puis  %s" % (action, choix),
+            n=n,
+        )
+    return trace
+
+
+# --------------------------------------------------------------------------
+# 0. Une ligne d'etoiles — l'exercice d'entree
+# --------------------------------------------------------------------------
 
 LIGNE = Pattern(
     key="ligne",
@@ -131,7 +201,152 @@ int main(void) {
     },
     ref={"etoiles": "a"},
     rows=lambda p, get: ["*" * get("etoiles")({"n": p["n"]})],
-    trace=_ligne_trace,
+    trace=condition_trace("etoiles", lambda n: 0, +1, "j++"),
+    level=1,
+)
+
+
+# --------------------------------------------------------------------------
+# 0 bis. Compte a rebours
+# --------------------------------------------------------------------------
+
+REBOURS = Pattern(
+    key="rebours",
+    name="Compte à rebours",
+    brief="Afficher n étoiles, mais avec un compteur qui descend.",
+    why="Le compteur ne part pas toujours de zéro. La borne change de camp.",
+    lesson=(
+        "Ici `j` démarre à `n` et **descend** : `j--` retire un à chaque tour.",
+        "La boucle s'arrête quand le test devient faux, comme toujours.",
+        "Attention au réflexe : ce n'est plus `j < n`. Comptez les valeurs "
+        "que prend `j` avant l'arrêt.",
+    ),
+    dim=("n", 3, 9),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    for (int j = n; @etoiles@; j--) {
+        printf("*");
+    }
+    printf("\\n");
+    return 0;
+}""",
+    blanks={
+        "etoiles": ("Condition d'arrêt de la boucle", _opts(
+            ("a", "j > 0", lambda c: c["n"]),
+            ("b", "j >= 0", lambda c: c["n"] + 1),
+            ("c", "j > 1", lambda c: c["n"] - 1),
+            ("d", "j < n", lambda c: 0),
+        )),
+    },
+    ref={"etoiles": "a"},
+    rows=lambda p, get: ["*" * get("etoiles")({"n": p["n"]})],
+    trace=condition_trace("etoiles", lambda n: n, -1, "j--"),
+    level=1,
+)
+
+
+# --------------------------------------------------------------------------
+# 0 ter. Le pas de la boucle
+# --------------------------------------------------------------------------
+
+def _pas_rows(p, get):
+    n, pas = p["n"], get("pas")({"n": p["n"]})
+    return [" ".join(str(j) for j in range(0, n, pas))]
+
+
+PAS = Pattern(
+    key="pas",
+    name="Le pas de la boucle",
+    brief="Afficher les nombres de 0 à n-1, de deux en deux.",
+    why="Nombre de tours et valeur du compteur sont deux choses distinctes.",
+    lesson=(
+        "La troisième partie du `for` dit de combien le compteur avance.",
+        "`j++` avance de 1, `j += 2` avance de 2.",
+        "Changer le pas change **le nombre de tours** et **les valeurs** "
+        "prises par `j`. Ici on affiche `j` lui-même, pas une étoile.",
+    ),
+    dim=("n", 6, 12),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    for (int j = 0; j < n; @pas@) {
+        printf("%d ", j);
+    }
+    printf("\\n");
+    return 0;
+}""",
+    blanks={
+        "pas": ("Pas de la boucle", _opts(
+            ("a", "j += 2", lambda c: 2),
+            ("b", "j++", lambda c: 1),
+            ("c", "j += 3", lambda c: 3),
+            ("d", "j += 5", lambda c: 5),
+        )),
+    },
+    ref={"pas": "a"},
+    rows=_pas_rows,
+    trace=step_trace(
+        "pas", "j < n",
+        {"j++": lambda n: 1, "j += 2": lambda n: 2,
+         "j += 3": lambda n: 3, "j += 5": lambda n: 5},
+        emit=lambda j: "%d " % j,
+        action='printf("%d ", j)',
+    ),
+    level=2,
+)
+
+
+# --------------------------------------------------------------------------
+# 0 quater. La boucle while et l'increment oublie
+# --------------------------------------------------------------------------
+
+WHILE = Pattern(
+    key="tantque",
+    name="La boucle while",
+    brief="Le même comptage, écrit avec while. À vous de faire avancer j.",
+    why="Le for cache l'incrément. Le while le laisse à votre charge.",
+    lesson=(
+        "`while (test)` répète tant que le test est vrai — exactement comme "
+        "le `for`, mais sans son départ ni son pas.",
+        "C'est à vous d'écrire ce qui fait avancer le compteur, **dans** "
+        "le corps de la boucle.",
+        "Si rien ne rapproche le compteur de la condition d'arrêt, le test "
+        "reste vrai : la boucle ne s'arrête jamais.",
+    ),
+    dim=("n", 4, 9),
+    tpl="""#include <stdio.h>
+
+int main(void) {
+    int n = @n@;
+    int j = 0;
+    while (j < n) {
+        printf("*");
+        @incr@;
+    }
+    printf("\\n");
+    return 0;
+}""",
+    blanks={
+        "incr": ("Ce qui fait avancer le compteur", _opts(
+            ("a", "j++", lambda c: c["n"]),
+            ("b", "j += 2", lambda c: -(-c["n"] // 2)),
+            ("c", "j += n", lambda c: 1),
+            ("d", "j--", _never_ends),
+        )),
+    },
+    ref={"incr": "a"},
+    rows=lambda p, get: ["*" * get("incr")({"n": p["n"]})],
+    trace=step_trace(
+        "incr", "j < n",
+        {"j++": lambda n: 1, "j += 2": lambda n: 2,
+         "j += n": lambda n: n, "j--": lambda n: -1},
+        emit=lambda _j: "*",
+        action='printf("*")',
+    ),
+    level=2,
 )
 
 
@@ -169,6 +384,7 @@ int main(void) {
     rows=lambda p, get: [
         "*" * get("stars")({"i": i, "n": p["n"]}) for i in range(p["n"])
     ],
+    level=2,
 )
 
 
@@ -206,6 +422,7 @@ int main(void) {
     rows=lambda p, get: [
         "*" * get("stars")({"i": i, "n": p["n"]}) for i in range(p["n"])
     ],
+    level=2,
 )
 
 
@@ -243,6 +460,7 @@ int main(void) {
     rows=lambda p, get: [
         "*" * get("stars")({"i": i, "n": p["n"]}) for i in range(p["n"])
     ],
+    level=2,
 )
 
 
@@ -291,6 +509,7 @@ int main(void) {
         + "*" * get("stars")({"i": i, "n": p["n"]})
         for i in range(p["n"])
     ],
+    level=3,
 )
 
 
@@ -346,6 +565,7 @@ int main(void) {
     },
     ref={"spaces": "a", "stars": "a"},
     rows=_losange_rows,
+    level=4,
 )
 
 
@@ -394,6 +614,7 @@ int main(void) {
          + "* " * get("groups")({"i": i, "n": p["n"]})).rstrip()
         for i in range(p["n"])
     ],
+    level=3,
 )
 
 
@@ -450,6 +671,7 @@ int main(void) {
     },
     ref={"border": "a"},
     rows=_magique_rows,
+    level=3,
 )
 
 
@@ -501,13 +723,80 @@ int main(void) {
     },
     ref={"bound": "a", "product": "a"},
     rows=_table_rows,
+    level=3,
+)
+
+
+# --------------------------------------------------------------------------
+# Mode « predire la sortie »
+# --------------------------------------------------------------------------
+
+def predict_from(base, key, name, why, level, dim=None):
+    """Derive un exercice de prediction a partir d'un motif existant.
+
+    Le code est livre complet, trous deja remplis par la selection de
+    reference ; l'eleve n'a rien a choisir, il ecrit la sortie attendue.
+    C'est le mode le plus resistant a une IA : il n'y a pas d'enonce a
+    copier, seulement un code a lire.
+    """
+    tpl = base.tpl
+    for blank_id, (_label, options) in base.blanks.items():
+        for option in options:
+            if option.id == base.ref[blank_id]:
+                tpl = tpl.replace("@%s@" % blank_id, option.c)
+
+    def reference(blank_id):
+        for option in base.blanks[blank_id][1]:
+            if option.id == base.ref[blank_id]:
+                return option.fn
+        raise KeyError(blank_id)
+
+    return Pattern(
+        key=key,
+        name=name,
+        brief="Lisez le code, puis écrivez la sortie qu'il produit.",
+        why=why,
+        lesson=(
+            "Ne devinez pas : **déroulez** la boucle tour par tour, "
+            "comme dans les exercices d'entrée.",
+            "Les espaces comptent. Une ligne décalée d'un espace est fausse.",
+            "Les espaces en fin de ligne, eux, sont ignorés.",
+        ),
+        tpl=tpl,
+        blanks={},
+        ref={},
+        rows=lambda params, _get: base.rows(params, reference),
+        dim=dim or base.dim,
+        level=level,
+        mode="predict",
+    )
+
+
+PREDIRE_TRIANGLE = predict_from(
+    TRIANGLE_DROITE,
+    key="predire_triangle",
+    name="Prédire : triangle aligné à droite",
+    why="Deux boucles se partagent la ligne. Comptez les espaces avant les étoiles.",
+    level=3,
+    dim=("n", 3, 6),
+)
+
+PREDIRE_MAGIQUE = predict_from(
+    CARRE_MAGIQUE,
+    key="predire_magique",
+    name="Prédire : carré magique",
+    why="Un if dans deux boucles : la sortie dépend de la position, pas du compteur seul.",
+    level=4,
+    dim=("n", 3, 6),
 )
 
 
 PATTERNS = {
     p.key: p
-    for p in (LIGNE, CARRE, TRIANGLE_RECT, TRIANGLE_INV, TRIANGLE_DROITE,
-              LOSANGE, PYRAMIDE, CARRE_MAGIQUE, TABLE)
+    for p in (LIGNE, REBOURS, PAS, WHILE,
+              CARRE, TRIANGLE_RECT, TRIANGLE_INV, TRIANGLE_DROITE,
+              LOSANGE, PYRAMIDE, CARRE_MAGIQUE, TABLE,
+              PREDIRE_TRIANGLE, PREDIRE_MAGIQUE)
 }
 
 ALL_KEYS = list(PATTERNS)
