@@ -1,11 +1,29 @@
 ------------------------------------------------------------------------------------------------------
-🎯PROJET ARCHITECTURE SI
+🎯 PROJET ARCHITECTURE SI — Atelier « boucles sans IA »
 ------------------------------------------------------------------------------------------------------
-Pitch de l'atelier.  
+
+Cet atelier construit, déploie et exploite une application web qui enseigne les **boucles imbriquées en C** à des débutants, conçue pour que le copier-coller dans une IA n'apporte aucun avantage.
+
+Les exercices classiques (« écris une pyramide en étoiles ») sont résolus en une seconde par un assistant IA : l'élève obtient le code sans construire le raisonnement. La réponse retenue ici est de **déplacer la tâche** — au lieu de *produire* du code, l'élève *lit et comprend l'exécution*. Quatre leviers rendent la triche sans intérêt :
+
+- **Compléter des conditions de boucle** plutôt qu'écrire tout le code : un menu déroulant ne se colle pas dans une IA.
+- **Tirer la taille au hasard**, pour que la cible diffère d'un poste à l'autre.
+- **Corriger côté serveur** : le navigateur ne reçoit jamais la réponse attendue.
+- **Surveiller la fenêtre** : sortir de l'épreuve pour aller consulter un assistant coûte des points.
+
+L'atelier a donc deux faces. Côté **enseignant**, vous apprenez la chaîne d'industrialisation continue : dépôt Git, hébergement, déploiement automatisé. Côté **pédagogique**, vous disposez à l'arrivée d'un outil de classe réellement utilisable.
 
 **Architecture cible**  
 
 ![Screenshot Actions](Architecture_cible.png)  
+
+### Public visé
+
+**Utilisateur principal :** un enseignant en programmation qui anime un cours d'initiation.
+
+**Apprenants :** débutants complets. Aucun prérequis au-delà de la notion de variable.
+
+**Contexte d'usage :** en classe, poste par poste, avec l'énoncé projeté au tableau. Côté étudiant, aucune installation ni compte n'est nécessaire — un nom, un prénom et un code de session suffisent.
 
 -------------------------------------------------------------------------------------------------------
 🧩 Séquence 1 : GitHUB
@@ -49,10 +67,31 @@ Vous avez vu dans cette séquence comment créer des secrets GiHUB afin de mettr
 ---------------------------------------------------
 🗺️ Séquence 4 : Mise en service
 ---------------------------------------------------
-Objectif : ...  
+Objectif : Configurer l'application et ouvrir votre première session  
 Difficulté : Faible (~10 minutes)
 ---------------------------------------------------
-   
+L'application a besoin de **quatre variables d'environnement**. Sur PythonAnywhere, déclarez-les dans **Web → Environment variables** (ou en tête de votre fichier WSGI) :
+
+| Variable | Rôle | Exemple |
+| --- | --- | --- |
+| `ATELIER_SECRET_KEY` | Signe les cookies de session. **Obligatoire** : sans elle, n'importe qui peut forger une session enseignant. | une chaîne aléatoire de 40 caractères |
+| `ATELIER_ADMIN_USER` | Votre identifiant enseignant | `prof` |
+| `ATELIER_ADMIN_PASSWORD` | Votre mot de passe enseignant | — |
+| `ATELIER_DATABASE` | Chemin du fichier SQLite (optionnel) | `/home/monuser/data/atelier.sqlite` |
+
+Pour générer une clé : `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
+⚠️ **Le fichier SQLite ne doit pas se trouver dans le répertoire déployé** si vous voulez pouvoir le sauvegarder indépendamment. Par défaut il est créé dans `instance/`, que le dépôt ignore : les déploiements ne l'écrasent donc jamais.
+
+Ensuite, côté enseignant :
+
+1. Rendez-vous sur `/admin/login` et connectez-vous.
+2. Créez une session : donnez-lui un intitulé et cochez les motifs de l'épreuve.
+3. Cliquez sur **Lancer la session**. Un code à six lettres s'affiche.
+4. Dictez ce code et l'adresse du site à vos étudiants.
+5. Suivez leurs réponses en direct sur la même page.
+6. Cliquez sur **Terminer la session** : les notes sont figées et la session bascule dans l'historique.
+
 
 ---------------------------------------------------
 🔹 Séquence 5 : Exercices
@@ -75,6 +114,190 @@ Objectif : Créer une application de biliothèque
 Difficulté : Moyenne (~180 minutes)
 ---------------------------------------------------
 ...  
+
+---------------------------------------------------
+📘 Référence : l'application
+---------------------------------------------------
+
+### Ce que fait l'application
+
+Une épreuve surveillée sur les **boucles imbriquées en C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible. Huit motifs sont disponibles (carré, triangle rectangle, triangle inversé, triangle aligné à droite, losange, pyramide, carré magique, table de multiplication).
+
+**La taille de chaque motif est tirée au hasard par étudiant** : deux voisins n'ont pas la même cible. La correction est faite **côté serveur** — le navigateur ne reçoit jamais la réponse attendue.
+
+### Surveillance de la fenêtre
+
+L'épreuve s'ouvre en plein écran. Une « sortie » est tout passage hors de l'état surveillé : changement d'onglet, sortie du plein écran, ou perte du premier plan. À chaque sortie, un popup s'ouvre avec un décompte de 3 secondes.
+
+| Sortie | Conséquence |
+| --- | --- |
+| 1<sup>re</sup> | Avertissement, aucun point retiré |
+| 2<sup>e</sup> | &minus;2 points |
+| 3<sup>e</sup> et suivantes | &minus;3 points |
+
+Le décompte est un rappel à l'ordre : la pénalité dépend du rang de la sortie, pas du délai de retour. Ce délai est néanmoins enregistré et visible par l'enseignant.
+
+Si le navigateur refuse le plein écran, la surveillance se rabat sur la détection du changement d'onglet et l'étudiant en est informé.
+
+### Les huit motifs
+
+Pour la ligne `i` (à partir de 0), voici les formules attendues. L'étudiant ne les écrit pas : il les reconnaît parmi quatre propositions par menu.
+
+| Motif | Espaces | Étoiles / contenu |
+| --- | --- | --- |
+| Carré | 0 | `n` |
+| Triangle rectangle | 0 | `i + 1` |
+| Triangle inversé | 0 | `n - i` |
+| Triangle aligné à droite | `n - 1 - i` | `i + 1` |
+| Losange (2·h lignes, L symétrique) | `h - 1 - L` | `2 * (L + 1)` |
+| Pyramide (groupes « \* ») | `n - 1 - i` | `i + 1` groupes |
+| Carré magique (if de bord) | — | `*` si bord, sinon `o` |
+| Table de multiplication | — | `v * k`, k de 1 à 9, `v` lu au clavier |
+
+Le carré magique introduit le `if` ; la table introduit `scanf` et une entrée utilisateur.
+
+L'enseignant choisit à la création de la session quels motifs composent l'épreuve.
+
+### Modèle d'un exercice
+
+Le cœur est un moteur piloté par des données : chaque exercice est un objet décrivant sa cible, son code à trous et sa logique de génération. Le rendu est séparé du contenu.
+
+- `name`, `brief`, `why` : libellés affichés.
+- `dim` / `value` : taille tirable (`n`, `h`) ou valeur saisie (`v`).
+- `blanks` : les menus à compléter ; chaque option porte son texte C et la fonction Python équivalente.
+- `tpl` : le gabarit de code, mélange de texte et de marqueurs de trou.
+- `rows(params, get)` : produit chaque ligne à partir des fonctions choisies ; sert à la fois à la cible (choix de référence) et à la sortie de l'élève.
+
+Une sélection est donc juste **exactement quand elle reproduit la cible** : il n'y a pas de table de bonnes réponses à maintenir en parallèle du moteur.
+
+Cycle d'un exercice :
+
+```mermaid
+flowchart LR
+  A[Lire la cible] --> B[Choisir les conditions]
+  B --> C[Compiler et executer]
+  C --> D{Conforme ?}
+  D -->|non| B
+  D -->|oui| E[Motif suivant]
+```
+
+La comparaison se fait ligne à ligne, après suppression des espaces de fin, et surligne les écarts.
+
+### Barème
+
+`note = 20 × (motifs réussis / motifs de la session) − pénalités`, bornée à l'intervalle [0, 20]. Les motifs pèsent tous le même poids ; le nombre de tentatives n'entre pas dans la note, mais il est affiché à l'enseignant.
+
+### Routes
+
+| Route | Accès | Rôle |
+| --- | --- | --- |
+| `/` | public | Identification (nom, prénom, code de session) |
+| `/exercice` | étudiant | L'épreuve |
+| `/termine` | étudiant | Copie remise et détail de la note |
+| `/admin/login` | public | Connexion enseignant |
+| `/admin/` | enseignant | Créer une session, lister celles en cours |
+| `/admin/sessions/<id>` | enseignant | Lancer, suivre en direct, terminer |
+| `/admin/historique` | enseignant | Sessions closes, moyennes, export |
+| `/admin/sessions/<id>/export.csv` | enseignant | Notes au format CSV (séparateur `;`) |
+
+### Structure du code
+
+```
+flask_app.py            Point d'entrée WSGI
+atelier/
+  __init__.py           Fabrique d'application et configuration
+  db.py                 Connexion SQLite, une par requête
+  schema.sql            Schéma (session, student, task, incident)
+  exercises.py          Moteur des 8 motifs : gabarits, menus, correction
+  scoring.py            Barème et table des pénalités
+  student.py            Parcours étudiant et API
+  admin.py              Espace enseignant, suivi direct, historique
+  templates/            Gabarits Jinja
+  static/
+    css/style.css       Thème clair/sombre
+    js/proctor.js       Surveillance de la fenêtre
+    js/exercise.js      Page d'exercice
+    js/admin_live.js    Suivi direct (interrogation toutes les 3 s)
+test_atelier.py         Tests de bout en bout
+```
+
+**Ajouter un motif** se fait dans `exercises.py` : un objet `Pattern` décrit son gabarit, ses menus et sa fonction `rows`. Rien d'autre à modifier.
+
+### Spécifications techniques
+
+- **Stack :** Python, Flask, SQLite. Côté navigateur, HTML, CSS et JavaScript vanilla — aucun framework, aucune étape de build.
+- **Dépendances :** Flask uniquement (`requirements.txt`). La seule ressource externe chargée par le navigateur est Google Fonts.
+- **Thèmes :** clair et sombre, suivant le réglage système, avec bascule manuelle (utile au vidéoprojecteur).
+- **Persistance :** SQLite. Les copies, les sorties de fenêtre et les notes sont conservées — c'est ce qui rend l'historique possible. Côté navigateur, seul le thème est stocké (`localStorage`, encadré d'un `try/catch`).
+- **Accessibilité :** focus clavier visible, `prefers-reduced-motion` respecté, statuts jamais portés par la couleur seule (toujours doublés d'un glyphe et d'une infobulle).
+- **Responsive :** du mobile au grand écran ; le code et les grilles défilent horizontalement si besoin.
+
+> **Note d'évolution.** La première version du projet visait un fichier HTML autonome, sans backend ni donnée élève stockée. L'ajout de l'identification, du suivi en direct, des sessions pilotées par l'enseignant et de l'historique a rendu un serveur indispensable : on ne peut ni noter de façon fiable, ni empêcher la lecture de la réponse attendue, ni consolider des résultats, depuis le seul navigateur.
+
+### Pourquoi une interrogation périodique et pas de WebSocket
+
+PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi direct interroge donc `/admin/api/sessions/<id>/live` toutes les 3 secondes. La charge reste faible : une requête par enseignant connecté, pas par étudiant.
+
+### Développement local
+
+```bash
+pip install -r requirements.txt
+export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
+flask --app flask_app run --debug
+python3 -m unittest test_atelier -v     # 24 tests
+```
+
+---------------------------------------------------
+✅ Critères d'acceptation
+---------------------------------------------------
+
+Un motif ou une fonctionnalité est considéré terminé quand :
+
+- [x] La sélection correcte reproduit exactement la cible, à toutes les tailles proposées.
+- [x] Aucune sélection incorrecte ne reproduit la cible (vérifié pour chaque distracteur, à chaque taille).
+- [x] Une sélection incorrecte est signalée ligne par ligne, sans faux positif.
+- [x] La régénération aléatoire donne une cible différente sans casser la correction.
+- [x] La réponse attendue ne transite jamais jusqu'au navigateur.
+- [x] Une sortie de fenêtre compte pour une seule pénalité, quel que soit le nombre d'événements émis par le navigateur.
+- [x] La note est bornée à [0, 20] et figée à la clôture de la session.
+- [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
+
+La suite `test_atelier.py` couvre ces points (24 tests).
+
+---------------------------------------------------
+🚧 Évolutions et backlog
+---------------------------------------------------
+
+Pistes classées par priorité décroissante. L'effort est indicatif (S = petit, M = moyen).
+
+| Priorité | Évolution | Détail | Effort |
+| --- | --- | --- | --- |
+| Haute | Mode « prédire la sortie » | Donner le code rempli, l'élève écrit le motif obtenu | M |
+| Haute | Mode « trouver le bug » | Borne exclue, boucle infinie, condition inversée, réinitialisation dans la boucle | M |
+| Moyenne | Mode Parsons | Réordonner des lignes mélangées : impossible à « générer » | M |
+| Moyenne | Exécution pas à pas | Voir variables et sortie évoluer tour par tour, à la révélation | M |
+| Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |
+| Moyenne | Version Python d'initiation | Boucles simples : `for`, `while`, accumulateur, compteur | M |
+| Basse | Boucles imbriquées libres | Motifs personnalisés pour élèves avancés | M |
+| Basse | Internationalisation | Textes séparés pour d'autres langues | M |
+
+Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le moteur est déjà séparé du contenu.
+
+*Déjà livré depuis la fiche initiale :* identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores.
+
+---------------------------------------------------
+⚠️ Contraintes, risques et limites connues
+---------------------------------------------------
+
+**Robustesse anti-triche.** Les menus limitent les réponses, donc un élève déterminé peut tester les combinaisons — quatre options par menu, une à deux menus par motif. Le nombre de tentatives est enregistré et affiché à l'enseignant, ce qui rend ce comportement visible. La valeur pédagogique vient de la prédiction et de l'oral : c'est à l'enseignant de la cadrer.
+
+**Surveillance.** La détection de sortie s'appuie sur des événements du navigateur. Elle décourage la consultation d'un assistant dans un autre onglet ; elle ne protège ni d'un second écran, ni d'un téléphone. Si le navigateur refuse le plein écran, la surveillance se rabat sur le changement d'onglet et l'étudiant en est informé.
+
+**Le moteur ne compile pas réellement le C.** Il simule chaque motif par une fonction Python dédiée. Ajouter un motif exige donc d'écrire sa fonction `rows` en même temps que son gabarit.
+
+**Comparaison des sorties.** La pyramide et les motifs à espaces voient leurs espaces de fin supprimés avant comparaison : un écart portant uniquement sur ces espaces ne serait pas signalé.
+
+**Échelle.** SQLite et l'interrogation périodique conviennent à une classe. Au-delà de quelques dizaines d'étudiants simultanés sur un compte PythonAnywhere gratuit, il faudrait revoir l'hébergement.
 
 --------------------------------------------------------------------
 🧠 Troubleshooting :

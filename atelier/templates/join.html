@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Rejoindre une session{% endblock %}
+{% block content %}
+<div class="card card-narrow">
+  <h1>Rejoindre une session</h1>
+  <p class="muted">Identifiez-vous avec votre nom et votre prénom, puis saisissez
+     le code affiché par l'enseignant.</p>
+
+  {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+
+  <form method="post" action="{{ url_for('student.join') }}" class="stack">
+    <label>Prénom
+      <input name="first_name" required autocomplete="given-name" maxlength="60" autofocus>
+    </label>
+    <label>Nom
+      <input name="last_name" required autocomplete="family-name" maxlength="60">
+    </label>
+    <label>Code de la session
+      <input name="code" required maxlength="12" class="mono code-input"
+             placeholder="ABC123" autocapitalize="characters" spellcheck="false">
+    </label>
+    <button type="submit" class="primary">Commencer</button>
+  </form>
+
+  <div class="notice">
+    <strong>Avant de commencer</strong>
+    <p>L'épreuve se déroule en plein écran. Chaque sortie de la fenêtre
+       (changement d'onglet, sortie du plein écran, clic ailleurs) est
+       enregistrée&nbsp;:</p>
+    <ul>
+      <li>1<sup>re</sup> sortie&nbsp;: avertissement</li>
+      <li>2<sup>e</sup> sortie&nbsp;: &minus;2 points</li>
+      <li>3<sup>e</sup> sortie et suivantes&nbsp;: &minus;3 points</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+{% block topbar %}
+<a class="ghost" href="{{ url_for('admin.dashboard') }}">Enseignant</a>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Sessions{% endblock %}
+{% block main_class %}wrap wide{% endblock %}
+{% block topbar %}
+<a class="ghost" href="{{ url_for('admin.history') }}">Historique</a>
+<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
+  <button type="submit" class="ghost">Déconnexion</button>
+</form>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Nouvelle session</h1>
+  <form method="post" action="{{ url_for('admin.create_session') }}" class="stack">
+    <label>Intitulé
+      <input name="title" maxlength="120" placeholder="TP boucles imbriquees — groupe B1" required>
+    </label>
+    <fieldset>
+      <legend>Motifs de l'épreuve</legend>
+      <p class="hint">La note sur 20 est répartie à parts égales entre les motifs retenus.</p>
+      <div class="checks">
+        {% for p in patterns %}
+        <label class="check">
+          <input type="checkbox" name="patterns" value="{{ p.key }}" checked>
+          <span><strong>{{ p.name }}</strong><em>{{ p.brief }}</em></span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <button type="submit" class="primary">Créer la session</button>
+  </form>
+</div>
+
+<div class="card">
+  <h1>Sessions en cours</h1>
+  {% if sessions %}
+  <table class="table">
+    <thead><tr><th>Code</th><th>Intitulé</th><th>Etat</th><th>Inscrits</th><th></th></tr></thead>
+    <tbody>
+      {% for s in sessions %}
+      <tr>
+        <td class="mono strong">{{ s['code'] }}</td>
+        <td>{{ s['title'] }}</td>
+        <td><span class="pill {{ 'ok' if s['status'] == 'open' else '' }}">{{ 'ouverte' if s['status'] == 'open' else 'brouillon' }}</span></td>
+        <td>{{ s['students'] }}</td>
+        <td><a class="ghost" href="{{ url_for('admin.session_view', session_id=s['id']) }}">Ouvrir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Aucune session en cours.</p>
+  {% endif %}
+</div>
+{% endblock %}

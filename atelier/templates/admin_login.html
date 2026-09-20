@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Espace enseignant{% endblock %}
+{% block content %}
+<div class="card card-narrow">
+  <h1>Espace enseignant</h1>
+  {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" class="stack">
+    <label>Identifiant <input name="username" required autofocus autocomplete="username"></label>
+    <label>Mot de passe <input name="password" type="password" required autocomplete="current-password"></label>
+    <button type="submit" class="primary">Se connecter</button>
+  </form>
+  <p class="hint">Identifiants definis par les variables d'environnement
+     <code>ATELIER_ADMIN_USER</code> et <code>ATELIER_ADMIN_PASSWORD</code>.</p>
+</div>
+{% endblock %}

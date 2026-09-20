@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ room['title'] }}{% endblock %}
+{% block main_class %}wrap wide{% endblock %}
+{% block topbar %}
+<a class="ghost" href="{{ url_for('admin.dashboard') }}">Sessions</a>
+<a class="ghost" href="{{ url_for('admin.history') }}">Historique</a>
+<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
+  <button type="submit" class="ghost">Déconnexion</button>
+</form>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="panel-head">
+    <div>
+      <h1>{{ room['title'] }}</h1>
+      <p class="muted">{{ pattern_names|join(' · ') }}</p>
+    </div>
+    <div class="session-actions">
+      {% if room['status'] == 'draft' %}
+        <form method="post" action="{{ url_for('admin.open_session', session_id=room['id']) }}" class="inline">
+          <button type="submit" class="primary">Lancer la session</button>
+        </form>
+      {% elif room['status'] == 'open' %}
+        <form method="post" action="{{ url_for('admin.close_session', session_id=room['id']) }}" class="inline"
+              onsubmit="return confirm('Clôturer la session ? Les notes seront figées et les étudiants ne pourront plus répondre.');">
+          <button type="submit" class="danger">Terminer la session</button>
+        </form>
+      {% else %}
+        <span class="pill">clôturée</span>
+      {% endif %}
+      <a class="ghost" href="{{ url_for('admin.export_csv', session_id=room['id']) }}">Export CSV</a>
+    </div>
+  </div>
+
+  {% if room['status'] == 'draft' %}
+  <p class="notice">La session est en brouillon&nbsp;: les étudiants ne peuvent
+     pas encore la rejoindre. Cliquez sur <strong>Lancer la session</strong>.</p>
+  {% endif %}
+
+  <div class="joinbox">
+    <div>
+      <span class="joinbox-label">Code à dicter</span>
+      <span class="joincode mono">{{ room['code'] }}</span>
+    </div>
+    <div>
+      <span class="joinbox-label">Adresse</span>
+      <span class="mono">{{ join_url }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="panel-head">
+    <h2>Suivi direct</h2>
+    <span class="pill" id="live-stamp">connexion…</span>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="tablewrap">
+    <table class="table live" id="live-table">
+      <thead id="live-head"></thead>
+      <tbody id="live-body"></tbody>
+    </table>
+  </div>
+  <p class="hint">Mise à jour automatique toutes les 3 secondes.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.LIVE_URL = "{{ url_for('admin.api_live', session_id=room['id']) }}";
+</script>
+<script src="{{ url_for('static', filename='js/admin_live.js') }}"></script>
+{% endblock %}

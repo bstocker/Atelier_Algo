@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Exercices — {{ student['session_title'] }}{% endblock %}
+{% block body_class %}exam{% endblock %}
+{% block main_class %}wrap wide{% endblock %}
+
+{% block topbar %}
+<span class="pill" id="who">{{ student['first_name'] }} {{ student['last_name'] }}</span>
+<span class="pill" id="progress-pill">0 / 0</span>
+<span class="pill warn" id="penalty-pill" hidden></span>
+{% endblock %}
+
+{% block content %}
+<!-- Écran d'accueil : le plein écran exige un geste utilisateur. -->
+<div class="card card-narrow" id="gate">
+  <h1>Prêt à commencer&nbsp;?</h1>
+  <p class="muted">L'épreuve s'ouvre en plein écran. Restez dans la fenêtre
+     jusqu'à la remise de votre copie.</p>
+  <button type="button" class="primary" id="start-btn">Passer en plein écran et commencer</button>
+  <p class="hint" id="gate-hint"></p>
+</div>
+
+<div id="app" hidden>
+  <nav class="tasknav" id="tasknav" aria-label="Liste des exercices"></nav>
+
+  <section class="panel">
+    <header class="panel-head">
+      <div>
+        <h2 id="task-name">—</h2>
+        <p class="muted" id="task-brief"></p>
+      </div>
+      <span class="pill" id="task-state"></span>
+    </header>
+
+    <div class="grid2">
+      <div>
+        <h3>Motif à reproduire</h3>
+        <pre class="ascii" id="target"></pre>
+      </div>
+      <div>
+        <h3>Votre sortie</h3>
+        <pre class="ascii" id="output"><span class="muted">Complétez les menus puis compilez.</span></pre>
+      </div>
+    </div>
+
+    <h3>Code à compléter</h3>
+    <pre class="code" id="code"></pre>
+
+    <div id="blanks" class="blanks"></div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="check-btn">Compiler et exécuter</button>
+      <span class="feedback" id="feedback" role="status" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <div class="finish-bar">
+    <p class="muted" id="finish-hint"></p>
+    <button type="button" class="danger" id="finish-btn">Remettre ma copie</button>
+  </div>
+</div>
+
+<!-- Popup de rappel, affiché a chaque sortie de fenêtre -->
+<div class="overlay" id="overlay" hidden role="alertdialog"
+     aria-modal="true" aria-labelledby="ov-title">
+  <div class="overlay-card">
+    <div class="countdown" id="ov-count">{{ return_delay }}</div>
+    <h2 id="ov-title">Revenez dans la fenêtre</h2>
+    <p id="ov-msg"></p>
+    <p class="overlay-tally" id="ov-tally"></p>
+    <button type="button" class="primary" id="resume-btn">Reprendre l'épreuve</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.ATELIER = { returnDelay: {{ return_delay }} };
+</script>
+<script src="{{ url_for('static', filename='js/proctor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/exercise.js') }}"></script>
+{% endblock %}

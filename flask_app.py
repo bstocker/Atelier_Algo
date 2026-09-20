@@ -1,10 +1,8 @@
-from flask import Flask
+"""Point d'entree WSGI (PythonAnywhere pointe sur ce fichier)."""
 
-app = Flask(__name__)
+from atelier import create_app
 
-@app.get("/")
-def hello():
-    return "Bonjour le monde ! (Flask on PythonAnywhere)"
+app = create_app()
 
 if __name__ == "__main__":
     # utile en local uniquement

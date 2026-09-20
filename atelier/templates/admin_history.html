@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Historique des sessions{% endblock %}
+{% block main_class %}wrap wide{% endblock %}
+{% block topbar %}
+<a class="ghost" href="{{ url_for('admin.dashboard') }}">Sessions</a>
+<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
+  <button type="submit" class="ghost">Déconnexion</button>
+</form>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Historique</h1>
+  {% if sessions %}
+  <div class="tablewrap">
+    <table class="table">
+      <thead>
+        <tr><th>Clôturée le</th><th>Intitulé</th><th>Code</th><th>Élèves</th>
+            <th>Moyenne</th><th>Min</th><th>Max</th><th>Sorties</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td class="mono">{{ (s['closed_at'] or '')[:16]|replace('T', ' ') }}</td>
+          <td>{{ s['title'] }}</td>
+          <td class="mono">{{ s['code'] }}</td>
+          <td>{{ s['students'] }}</td>
+          <td class="strong">{{ '%.2f'|format(s['average']) if s['average'] is not none else '—' }}</td>
+          <td>{{ '%.2f'|format(s['worst']) if s['worst'] is not none else '—' }}</td>
+          <td>{{ '%.2f'|format(s['best']) if s['best'] is not none else '—' }}</td>
+          <td>{{ s['exits'] or 0 }}</td>
+          <td class="row-actions">
+            <a class="ghost" href="{{ url_for('admin.session_view', session_id=s['id']) }}">Détail</a>
+            <a class="ghost" href="{{ url_for('admin.export_csv', session_id=s['id']) }}">CSV</a>
+            <form method="post" action="{{ url_for('admin.delete_session', session_id=s['id']) }}" class="inline"
+                  onsubmit="return confirm('Supprimer definitivement cette session et ses copies ?');">
+              <button type="submit" class="ghost danger-text">Supprimer</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Aucune session clôturée pour le moment.</p>
+  {% endif %}
+</div>
+{% endblock %}

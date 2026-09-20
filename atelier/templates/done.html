@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Copie remise{% endblock %}
+{% block content %}
+<div class="card card-narrow">
+  <h1>Copie remise</h1>
+  <p class="muted">{{ student['first_name'] }} {{ student['last_name'] }} —
+     {{ student['session_title'] }}</p>
+
+  <div class="score">
+    <span class="score-value">{{ '%.2f'|format(score) }}</span>
+    <span class="score-max">/ 20</span>
+  </div>
+
+  <table class="table">
+    <tbody>
+      <tr><th>Motifs réussis</th><td>{{ solved }} / {{ total }}</td></tr>
+      <tr><th>Note brute</th><td>{{ '%.2f'|format(base) }} / 20</td></tr>
+      <tr><th>Sorties de fenêtre</th><td>{{ student['exit_count'] }}</td></tr>
+      <tr><th>Pénalités</th><td>&minus;{{ '%.2f'|format(student['penalty_points']) }}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Détail par motif</h2>
+  <table class="table">
+    <thead><tr><th>Motif</th><th>Resultat</th><th>Tentatives</th></tr></thead>
+    <tbody>
+      {% for name, solved_flag, attempts in details %}
+      <tr>
+        <td>{{ name }}</td>
+        <td>{% if solved_flag %}<span class="ok">réussi</span>{% else %}<span class="ko">non réussi</span>{% endif %}</td>
+        <td>{{ attempts }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if incidents %}
+  <h2>Sorties enregistrées</h2>
+  <table class="table">
+    <thead><tr><th>#</th><th>Type</th><th>Pénalité</th><th>Retour</th></tr></thead>
+    <tbody>
+      {% for i in incidents %}
+      <tr>
+        <td>{{ i['ordinal'] }}</td>
+        <td>{{ i['kind'] }}</td>
+        <td>{% if i['penalty'] %}&minus;{{ '%.0f'|format(i['penalty']) }}{% else %}avertissement{% endif %}</td>
+        <td>{% if i['returned_ms'] is not none %}{{ '%.1f'|format(i['returned_ms'] / 1000) }} s{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('student.logout') }}">
+    <button type="submit" class="ghost">Quitter</button>
+  </form>
+</div>
+{% endblock %}
