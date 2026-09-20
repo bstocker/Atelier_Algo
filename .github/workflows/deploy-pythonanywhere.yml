@@ -16,6 +16,7 @@ jobs:
     #   - a secret containing a quote or a `;` would be executed as code.
     # Referenced as "$PA_USERNAME" etc., the shell sees plain data.
     env:
+      # --- Acces a l'hebergement ---
       PA_USERNAME: ${{ secrets.PA_USERNAME }}
       PA_TOKEN: ${{ secrets.PA_TOKEN }}
       PA_TARGET_DIR: ${{ secrets.PA_TARGET_DIR }}
@@ -23,6 +24,15 @@ jobs:
       # Optional: set the PA_HOST secret to "eu.pythonanywhere.com" if your
       # account is on the EU cluster.
       PA_HOST: ${{ secrets.PA_HOST }}
+
+      # --- Configuration de l'application ---
+      # PythonAnywhere n'a pas d'API pour les variables d'environnement. Ces
+      # secrets sont donc ecrits dans un fichier .env depose a cote de
+      # l'application, que create_app() lit au demarrage.
+      ATELIER_SECRET_KEY: ${{ secrets.ATELIER_SECRET_KEY }}
+      ATELIER_ADMIN_USER: ${{ secrets.ATELIER_ADMIN_USER }}
+      ATELIER_ADMIN_PASSWORD: ${{ secrets.ATELIER_ADMIN_PASSWORD }}
+      ATELIER_DATABASE: ${{ secrets.ATELIER_DATABASE }}
 
     steps:
       - name: Checkout
@@ -34,13 +44,15 @@ jobs:
           set -euo pipefail
 
           missing=()
-          for name in PA_USERNAME PA_TOKEN PA_TARGET_DIR PA_WEBAPP_DOMAIN; do
+          for name in PA_USERNAME PA_TOKEN PA_TARGET_DIR PA_WEBAPP_DOMAIN \
+                      ATELIER_SECRET_KEY ATELIER_ADMIN_USER ATELIER_ADMIN_PASSWORD; do
             if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
           done
 
           if (( ${#missing[@]} > 0 )); then
             echo "::error::Secret(s) manquant(s) ou vide(s) : ${missing[*]}"
             echo "A creer dans Settings -> Secrets and variables -> Actions -> New repository secret."
+            echo "Voir la sequence 4 du README pour le detail de chacun."
             exit 1
           fi
 
@@ -55,24 +67,42 @@ jobs:
             exit 1
           fi
 
-          echo "Les 4 secrets requis sont presents et bien formes."
+          # A newline inside a secret would split the .env into a broken line.
+          for name in ATELIER_SECRET_KEY ATELIER_ADMIN_USER ATELIER_ADMIN_PASSWORD ATELIER_DATABASE; do
+            if [[ "${!name:-}" == *$'\n'* ]]; then
+              echo "::error::${name} contient un retour a la ligne. Recreez ce secret sur une seule ligne."
+              exit 1
+            fi
+          done
 
-      - name: Upload all files recursively (dirs auto-created by Files API)
+          if (( ${#ATELIER_SECRET_KEY} < 32 )); then
+            echo "::error::ATELIER_SECRET_KEY fait ${#ATELIER_SECRET_KEY} caracteres, c'est trop court pour signer des cookies."
+            echo "Generez-en une avec : python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            exit 1
+          fi
+          if [[ "$ATELIER_SECRET_KEY" == "dev-only-change-me" ]]; then
+            echo "::error::ATELIER_SECRET_KEY vaut la valeur par defaut du code, qui est publique. Generez-en une."
+            exit 1
+          fi
+
+          # Resolved once, reused by the steps below.
+          host="${PA_HOST:-}"
+          if [[ -z "$host" ]]; then host="www.pythonanywhere.com"; fi
+          {
+            echo "PA_API_HOST=${host}"
+            echo "PA_DIR=${PA_TARGET_DIR%/}"   # a trailing slash would double the separator
+          } >> "$GITHUB_ENV"
+
+          echo "Les 7 secrets requis sont presents et bien formes."
+
+      - name: Upload application files
         shell: bash
         run: |
           set -euo pipefail
+          RESP="$(mktemp)"; trap 'rm -f "$RESP"' EXIT
 
-          RESP="$(mktemp)"
-          trap 'rm -f "$RESP"' EXIT
-
-          HOST="${PA_HOST:-}"
-          if [[ -z "$HOST" ]]; then HOST="www.pythonanywhere.com"; fi
-
-          # Trailing slashes would produce a double slash in the API path.
-          TARGET_DIR="${PA_TARGET_DIR%/}"
-
-          echo "Using PythonAnywhere host: ${HOST}"
-          echo "Target directory: ${TARGET_DIR}"
+          echo "Using PythonAnywhere host: ${PA_API_HOST}"
+          echo "Target directory: ${PA_DIR}"
 
           # Upload every file; remote directories are created automatically by the Files API.
           while IFS= read -r -d '' file; do
@@ -81,10 +111,10 @@ jobs:
             # Exclusions (adjust to taste)
             case "$rel" in
               .git/*|.github/*|.venv/*|__pycache__/*|node_modules/*) continue ;;
-              *.pyc|.DS_Store) continue ;;
+              *.pyc|.DS_Store|.env) continue ;;
             esac
 
-            remote_path="${TARGET_DIR}/${rel}"
+            remote_path="${PA_DIR}/${rel}"
             echo " - ${rel} -> ${remote_path}"
 
             # No --fail here: it hides the response body, and the body is the
@@ -92,7 +122,7 @@ jobs:
             status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
               -H "Authorization: Token ${PA_TOKEN}" \
               -F "content=@${file}" \
-              "https://${HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}")"
+              "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/files/path${remote_path}")"
 
             if [[ "$status" != 2* ]]; then
               echo "::error::Envoi de ${rel} refuse (HTTP ${status})"
@@ -109,6 +139,46 @@ jobs:
                 -print0
           )
 
+      - name: Upload environment file
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP="$(mktemp)"; trap 'rm -f "$RESP" "${ENV_FILE:-}"' EXIT
+
+          # Built outside the workspace so the previous step can never pick it
+          # up, and so `umask` applies before the secrets are written.
+          umask 077
+          ENV_FILE="$(mktemp)"
+          {
+            echo "# Genere par le workflow de deploiement, a partir des secrets GitHub."
+            echo "# Toute modification manuelle sera ecrasee au prochain push."
+            echo "ATELIER_SECRET_KEY=${ATELIER_SECRET_KEY}"
+            echo "ATELIER_ADMIN_USER=${ATELIER_ADMIN_USER}"
+            echo "ATELIER_ADMIN_PASSWORD=${ATELIER_ADMIN_PASSWORD}"
+            if [[ -n "${ATELIER_DATABASE:-}" ]]; then
+              echo "ATELIER_DATABASE=${ATELIER_DATABASE}"
+            fi
+          } > "$ENV_FILE"
+
+          echo " - .env (${ATELIER_DATABASE:+ATELIER_DATABASE, }ATELIER_SECRET_KEY, ATELIER_ADMIN_USER, ATELIER_ADMIN_PASSWORD) -> ${PA_DIR}/.env"
+
+          status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
+            -H "Authorization: Token ${PA_TOKEN}" \
+            -F "content=@${ENV_FILE}" \
+            "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/files/path${PA_DIR}/.env")"
+
+          if [[ "$status" != 2* ]]; then
+            echo "::error::Envoi du fichier .env refuse (HTTP ${status})"
+            echo "Reponse de l'API :"; cat "$RESP"; echo
+            exit 1
+          fi
+
+      - name: Reload web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP="$(mktemp)"; trap 'rm -f "$RESP"' EXIT
+
           echo "Reloading webapp ${PA_WEBAPP_DOMAIN}..."
 
           # A 409 often just means a reload is already running, so retry a few
@@ -117,7 +187,7 @@ jobs:
           for attempt in 1 2 3; do
             status="$(curl -sS -o "$RESP" -w '%{http_code}' -X POST \
               -H "Authorization: Token ${PA_TOKEN}" \
-              "https://${HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/")"
+              "https://${PA_API_HOST}/api/v0/user/${PA_USERNAME}/webapps/${PA_WEBAPP_DOMAIN}/reload/")"
 
             if [[ "$status" == 2* ]]; then break; fi
 

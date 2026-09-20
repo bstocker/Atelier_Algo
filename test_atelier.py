@@ -2,10 +2,11 @@
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
 
-from atelier import create_app, exercises as ex, scoring
+from atelier import create_app, load_env_file, exercises as ex, scoring
 
 
 class AtelierTest(unittest.TestCase):
@@ -248,6 +249,72 @@ class AtelierTest(unittest.TestCase):
         self.assertEqual(client.get("/api/task/losange").status_code, 404)
         self.assertEqual(client.post("/api/task/carre_magique/check",
                                      json={"selection": {}}).status_code, 404)
+
+
+class EnvFileTest(unittest.TestCase):
+    """Le deploiement depose un .env : create_app doit le lire."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.env_path = os.path.join(self.dir, ".env")
+        self.saved = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.saved)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def write(self, text):
+        with open(self.env_path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def test_values_are_loaded(self):
+        self.write("ATELIER_ADMIN_USER=prof\nATELIER_ADMIN_PASSWORD=motdepasse\n")
+        os.environ.pop("ATELIER_ADMIN_USER", None)
+        os.environ.pop("ATELIER_ADMIN_PASSWORD", None)
+        loaded = load_env_file(self.env_path)
+        self.assertEqual(sorted(loaded),
+                         ["ATELIER_ADMIN_PASSWORD", "ATELIER_ADMIN_USER"])
+        self.assertEqual(os.environ["ATELIER_ADMIN_USER"], "prof")
+
+    def test_existing_environment_wins(self):
+        self.write("ATELIER_ADMIN_USER=du-fichier\n")
+        os.environ["ATELIER_ADMIN_USER"] = "de-l-environnement"
+        self.assertEqual(load_env_file(self.env_path), [])
+        self.assertEqual(os.environ["ATELIER_ADMIN_USER"], "de-l-environnement")
+
+    def test_comments_blank_lines_and_quotes(self):
+        self.write('# un commentaire\n\n'
+                   'ATELIER_ADMIN_USER="entre guillemets"\n'
+                   "ATELIER_ADMIN_PASSWORD='simples'\n"
+                   'ligne_sans_egal\n')
+        for name in ("ATELIER_ADMIN_USER", "ATELIER_ADMIN_PASSWORD"):
+            os.environ.pop(name, None)
+        load_env_file(self.env_path)
+        self.assertEqual(os.environ["ATELIER_ADMIN_USER"], "entre guillemets")
+        self.assertEqual(os.environ["ATELIER_ADMIN_PASSWORD"], "simples")
+
+    def test_missing_file_is_not_an_error(self):
+        self.assertEqual(load_env_file(os.path.join(self.dir, "absent")), [])
+
+    def test_create_app_reads_the_file(self):
+        self.write("ATELIER_SECRET_KEY=cle-venue-du-fichier\n"
+                   "ATELIER_ADMIN_USER=prof\n"
+                   "ATELIER_ADMIN_PASSWORD=secret\n")
+        for name in ("ATELIER_SECRET_KEY", "ATELIER_ADMIN_USER",
+                     "ATELIER_ADMIN_PASSWORD"):
+            os.environ.pop(name, None)
+        os.environ["ATELIER_ENV_FILE"] = self.env_path
+        os.environ["ATELIER_DATABASE"] = os.path.join(self.dir, "t.sqlite")
+        app = create_app()
+        self.assertEqual(app.config["SECRET_KEY"], "cle-venue-du-fichier")
+        self.assertEqual(app.config["ADMIN_USER"], "prof")
+
+        # Et l'enseignant peut effectivement se connecter avec ces valeurs.
+        client = app.test_client()
+        resp = client.post("/admin/login",
+                           data={"username": "prof", "password": "secret"})
+        self.assertEqual(resp.headers["Location"], "/admin/")
 
 
 class ScoringTest(unittest.TestCase):

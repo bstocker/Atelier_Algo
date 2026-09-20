@@ -7,8 +7,47 @@ from flask import Flask
 from . import db
 
 
+def load_env_file(path):
+    """Charge un fichier .env, sans dependance externe.
+
+    PythonAnywhere n'expose aucune API pour les variables d'environnement :
+    le workflow de deploiement depose donc un fichier .env a cote de
+    l'application, genere a partir des secrets GitHub du depot.
+
+    Les variables deja presentes dans l'environnement ne sont pas ecrasees.
+    Un reglage pose a la main dans l'onglet Web de PythonAnywhere, ou un
+    `export` en developpement local, reste donc prioritaire sur le fichier.
+    """
+    if not os.path.isfile(path):
+        return []
+
+    loaded = []
+    with open(path, encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, _, value = line.partition("=")
+            name, value = name.strip(), value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            if name and name not in os.environ:
+                os.environ[name] = value
+                loaded.append(name)
+    return loaded
+
+
 def create_app(config=None):
     app = Flask(__name__, instance_relative_config=True)
+
+    # Avant toute lecture de os.environ : le fichier depose par le
+    # deploiement doit pouvoir alimenter la configuration ci-dessous.
+    env_file = os.environ.get(
+        "ATELIER_ENV_FILE",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     ".env"),
+    )
+    loaded = load_env_file(env_file)
 
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("ATELIER_SECRET_KEY", "dev-only-change-me"),
@@ -23,6 +62,10 @@ def create_app(config=None):
     )
     if config:
         app.config.update(config)
+
+    if loaded:
+        app.logger.info("Variables chargees depuis %s : %s",
+                        env_file, ", ".join(loaded))
 
     if app.config["SECRET_KEY"] == "dev-only-change-me":
         app.logger.warning(

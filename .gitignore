@@ -7,3 +7,4 @@ instance/
 *.sqlite-wal
 *.sqlite-shm
 .DS_Store
+.env

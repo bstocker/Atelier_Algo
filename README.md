@@ -52,12 +52,22 @@ Dans le Repository GitHUB que vous venez de créer précédemment lors de la sé
 
 Pour utiliser cette Action (deploy-pythonanywhere.yml), **vous avez besoin de créer des secrets dans GitHUB** afin de ne pas divulguer des informations sensibles aux internautes de passage dans votre Repository comme vos login et password par exemple.  
 
-Pour cet atelier, **vous avez 4 secrets à créer** dans votre Repository GitHUB : **Settings → Secrets and variables → Actions → New repository secret**  
-  
+Pour cet atelier, **vous avez 7 secrets à créer** dans votre Repository GitHUB : **Settings → Secrets and variables → Actions → New repository secret**
+
+Les quatre premiers servent à **déployer** :
+
 **PA_USERNAME** = votre username PythonAnywhere.  
 **PA_TOKEN** = votre API token. Token à créer dans pythonanywhere (Acount → API Token).  
 **PA_TARGET_DIR** = Web → Source code (ex: /home/monuser/myapp).  
 **PA_WEBAPP_DOMAIN** = votre site (ex: monuser.pythonanywhere.com).  
+
+Les trois suivants **configurent l'application** elle-même. Le rôle de chacun est détaillé en séquence 4 :
+
+**ATELIER_SECRET_KEY** = une chaîne aléatoire, 32 caractères minimum.  
+**ATELIER_ADMIN_USER** = votre identifiant enseignant.  
+**ATELIER_ADMIN_PASSWORD** = votre mot de passe enseignant.  
+
+💡 Le workflow refuse de déployer tant qu'un de ces 7 secrets manque, est vide ou est mal formé. Il vous dira lequel et pourquoi, dans le log de l'Action. **Créez-les tous les 7 maintenant**, sinon votre premier déploiement échouera.
   
 **Dernière étape :** Pour engager l'automatisation de votre première Action, vous devez cliquer sur le gros boutton vert dans l'onglet supérieur [Actions] dans votre Repository Github. Le boutton s'intitule "I understand my workflows, go ahead and enable them"   
 
@@ -70,22 +80,36 @@ Vous avez vu dans cette séquence comment créer des secrets GiHUB afin de mettr
 Objectif : Configurer l'application et ouvrir votre première session  
 Difficulté : Faible (~10 minutes)
 ---------------------------------------------------
-L'application a besoin de **quatre variables d'environnement**. Sur PythonAnywhere, déclarez-les dans **Web → Environment variables** (ou en tête de votre fichier WSGI) :
+L'application lit sa configuration dans des variables d'environnement. Vous n'avez rien à saisir sur PythonAnywhere : **elles sont produites à partir des secrets GitHub créés en séquence 3**.
 
-| Variable | Rôle | Exemple |
+| Secret GitHub | Rôle | Obligatoire |
 | --- | --- | --- |
-| `ATELIER_SECRET_KEY` | Signe les cookies de session. **Obligatoire** : sans elle, n'importe qui peut forger une session enseignant. | une chaîne aléatoire de 40 caractères |
-| `ATELIER_ADMIN_USER` | Votre identifiant enseignant | `prof` |
-| `ATELIER_ADMIN_PASSWORD` | Votre mot de passe enseignant | — |
-| `ATELIER_DATABASE` | Chemin du fichier SQLite (optionnel) | `/home/monuser/data/atelier.sqlite` |
+| `ATELIER_SECRET_KEY` | Signe les cookies de session. Sans elle, n'importe qui peut forger un cookie d'enseignant et prendre la main sur vos sessions. | oui, 32 caractères minimum |
+| `ATELIER_ADMIN_USER` | Votre identifiant enseignant | oui |
+| `ATELIER_ADMIN_PASSWORD` | Votre mot de passe enseignant | oui |
+| `ATELIER_DATABASE` | Chemin du fichier SQLite | non, défaut `instance/atelier.sqlite` |
 
-Pour générer une clé : `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+Pour générer la clé : `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
-⚠️ **Le fichier SQLite ne doit pas se trouver dans le répertoire déployé** si vous voulez pouvoir le sauvegarder indépendamment. Par défaut il est créé dans `instance/`, que le dépôt ignore : les déploiements ne l'écrasent donc jamais.
+⚠️ **Générez-la une fois et n'y touchez plus.** La changer invalide tous les cookies d'un coup : si vous la régénérez pendant une épreuve, toute la classe est déconnectée et doit se réidentifier.
 
-Ensuite, côté enseignant :
+### Comment les secrets arrivent jusqu'à l'application
 
-1. Rendez-vous sur `/admin/login` et connectez-vous.
+PythonAnywhere n'expose aucune API pour les variables d'environnement. Le workflow contourne cette limite : à chaque déploiement, l'étape **Upload environment file** écrit un fichier `.env` à partir des secrets et le dépose à côté de l'application. Au démarrage, `create_app()` le lit.
+
+```
+Secrets GitHub  ──►  .env généré par le workflow  ──►  create_app() au démarrage
+```
+
+Trois conséquences à connaître :
+
+- **Le `.env` n'est jamais dans le dépôt** : il est fabriqué au moment du déploiement et `.gitignore` l'exclut. Vos mots de passe ne partent donc pas sur GitHub en clair.
+- **Il est réécrit à chaque push.** Le modifier à la main sur PythonAnywhere ne sert à rien : passez par les secrets.
+- **Une vraie variable d'environnement reste prioritaire.** Si vous déclarez malgré tout quelque chose dans **Web → Environment variables**, ou un `export` en local, c'est cette valeur qui gagne. Pratique pour un test ponctuel sans toucher aux secrets.
+
+### Ouvrir votre première session
+
+1. Rendez-vous sur `/admin/login` et connectez-vous avec `ATELIER_ADMIN_USER` / `ATELIER_ADMIN_PASSWORD`.
 2. Créez une session : donnez-lui un intitulé et cochez les motifs de l'épreuve.
 3. Cliquez sur **Lancer la session**. Un code à six lettres s'affiche.
 4. Dictez ce code et l'adresse du site à vos étudiants.
@@ -219,6 +243,7 @@ atelier/
     js/exercise.js      Page d'exercice
     js/admin_live.js    Suivi direct (interrogation toutes les 3 s)
 test_atelier.py         Tests de bout en bout
+.env                    Genere par le deploiement, jamais versionne
 ```
 
 **Ajouter un motif** se fait dans `exercises.py` : un objet `Pattern` décrit son gabarit, ses menus et sa fonction `rows`. Rien d'autre à modifier.
@@ -244,7 +269,7 @@ PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi dire
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 24 tests
+python3 -m unittest test_atelier -v     # 29 tests
 ```
 
 ---------------------------------------------------
@@ -262,7 +287,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (24 tests).
+La suite `test_atelier.py` couvre ces points (29 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
