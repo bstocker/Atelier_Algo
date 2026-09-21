@@ -70,7 +70,8 @@
   function renderBlanks(data) {
     if (!data.blanks.length) return null;
     var box = section(data.mode === "debug" ? "Le diagnostic attendu"
-                                            : "Les réponses attendues");
+                    : data.mode === "qcm" ? "Les propositions"
+                                          : "Les réponses attendues");
     data.blanks.forEach(function (blank) {
       box.appendChild(make("p", "sheet-label", blank.label));
       var list = make("ul", "answers");
@@ -106,9 +107,11 @@
       el.body.appendChild(note);
     }
 
-    var why = section("Ce que l'exercice travaille");
-    why.appendChild(make("p", null, data.why));
-    el.body.appendChild(why);
+    if (data.why) {
+      var why = section("Ce que l'exercice travaille");
+      why.appendChild(make("p", null, data.why));
+      el.body.appendChild(why);
+    }
 
     if (data.lesson.length) {
       var lesson = section("Ce qu'il faut savoir, rappelé à l'élève");
@@ -122,25 +125,31 @@
       el.body.appendChild(lesson);
     }
 
-    var sorties = make("div", "sheet-outputs");
-    var attendu = section(data.mode === "predict"
-      ? "La sortie que l'élève doit écrire"
-      : data.mode === "debug" ? "La sortie attendue du programme"
-                              : "Le motif à reproduire");
-    attendu.appendChild(lines(data.target));
-    sorties.appendChild(attendu);
-    if (data.actual) {
-      var obtenu = section("Ce que le code fautif produit");
-      obtenu.appendChild(lines(data.actual));
-      sorties.appendChild(obtenu);
+    // Une question de QCM n'a ni sortie ni code : la fiche saute ces deux
+    // sections plutôt que de montrer des cadres vides.
+    if (data.target && data.target.length) {
+      var sorties = make("div", "sheet-outputs");
+      var attendu = section(data.mode === "predict"
+        ? "La sortie que l'élève doit écrire"
+        : data.mode === "debug" ? "La sortie attendue du programme"
+                                : "Le motif à reproduire");
+      attendu.appendChild(lines(data.target));
+      sorties.appendChild(attendu);
+      if (data.actual) {
+        var obtenu = section("Ce que le code fautif produit");
+        obtenu.appendChild(lines(data.actual));
+        sorties.appendChild(obtenu);
+      }
+      el.body.appendChild(sorties);
     }
-    el.body.appendChild(sorties);
 
-    var code = section(data.mode === "complete"
-      ? "Le code, trous remplis par la réponse de référence"
-      : "Le code tel que l'élève le lit");
-    code.appendChild(make("pre", "code", data.code));
-    el.body.appendChild(code);
+    if (data.code) {
+      var code = section(data.mode === "complete"
+        ? "Le code, trous remplis par la réponse de référence"
+        : "Le code tel que l'élève le lit");
+      code.appendChild(make("pre", "code", data.code));
+      el.body.appendChild(code);
+    }
 
     var blanks = renderBlanks(data);
     if (blanks) el.body.appendChild(blanks);

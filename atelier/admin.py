@@ -11,6 +11,7 @@ from flask import (Blueprint, Response, abort, jsonify, redirect,
                    render_template, request, session, url_for)
 
 from . import exercises as ex
+from . import qcm
 from . import scoring
 from .db import execute, get_db, now, query
 
@@ -83,8 +84,81 @@ def dashboard():
     )
     # Module puis niveau : l'enseignant choisit d'abord un sujet, ensuite
     # une difficulte, plutot que de lire dix-huit intitules d'affilee.
-    return render_template("admin_dashboard.html", sessions=sessions,
-                           catalogue=ex.catalogue(), levels=ex.LEVELS)
+    return render_template(
+        "admin_dashboard.html", sessions=sessions,
+        catalogue=ex.catalogue(), levels=ex.LEVELS,
+        imported=[{"key": row["key"], "title": row["title"],
+                   "questions": len(questions), "source": row["source"],
+                   "imported_at": row["imported_at"]}
+                  for row, questions in qcm.imported()],
+        notice=request.args.get("ok", ""),
+        error=request.args.get("error", ""),
+    )
+
+
+# --------------------------------------------------------------------------
+# Chapitre QCM : import, retrait, modele
+# --------------------------------------------------------------------------
+
+@bp.post("/qcm")
+@require_admin
+def import_qcm():
+    """Depose un classeur Excel : un sous-module de plus au chapitre QCM."""
+    upload = request.files.get("workbook")
+    if upload is None or not upload.filename:
+        return redirect(url_for("admin.dashboard",
+                                error="Choisissez un fichier .xlsx."))
+    title = request.form.get("title", "") or upload.filename.rsplit(".", 1)[0]
+    try:
+        questions = qcm.parse(upload.stream)
+        key = qcm.save(title, request.form.get("summary", ""), questions,
+                       source=upload.filename)
+    except qcm.BadWorkbook as refus:
+        return redirect(url_for("admin.dashboard", error=str(refus)))
+
+    # Le catalogue doit porter le nouveau module des cette redirection.
+    qcm.sync(force=True)
+    module = ex.MODULE_BY_KEY[key]
+    return redirect(url_for(
+        "admin.dashboard",
+        ok="« %s » importé : %d question%s." % (module.title, len(questions),
+                                                "s" if len(questions) > 1 else "")))
+
+
+@bp.post("/qcm/<key>/delete")
+@require_admin
+def delete_qcm(key):
+    """Retire un module importe, sauf s'il sert deja dans une session."""
+    sessions = qcm.used_by(key)
+    if sessions:
+        return redirect(url_for(
+            "admin.dashboard",
+            error="Ce QCM est utilisé par %d session%s (%s) : il ne peut pas "
+                  "être supprimé sans vider ces copies."
+                  % (len(sessions), "s" if len(sessions) > 1 else "",
+                     ", ".join(sessions[:3]))))
+    if not qcm.delete(key):
+        return redirect(url_for("admin.dashboard", error="QCM introuvable."))
+    qcm.sync(force=True)
+    return redirect(url_for("admin.dashboard", ok="QCM supprimé."))
+
+
+@bp.get("/qcm/modele.xlsx")
+@require_admin
+def qcm_model():
+    """Le classeur modele, rempli avec le QCM Docker livre avec l'appli."""
+    from .modules import qcm_docker
+    try:
+        book = qcm.model_workbook(qcm_docker.PATTERNS)
+    except qcm.BadWorkbook as refus:
+        return redirect(url_for("admin.dashboard", error=str(refus)))
+    return Response(
+        book,
+        mimetype="application/vnd.openxmlformats-officedocument."
+                 "spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 'attachment; filename="modele-qcm.xlsx"'},
+    )
 
 
 @bp.get("/api/patterns/<key>")
@@ -271,7 +345,11 @@ def _live_payload(session_id):
         "status": room["status"],
         "code": room["code"],
         "title": room["title"],
-        "patterns": [{"key": k, "name": ex.PATTERNS[k].name} for k in keys],
+        # L'intitulé complet part en infobulle : deux QCM ont tous les deux
+        # une « Q1 », et la colonne est trop étroite pour l'énoncé.
+        "patterns": [{"key": k, "name": ex.PATTERNS[k].name,
+                      "brief": ex.PATTERNS[k].brief,
+                      "module": ex.module_of(k).title} for k in keys],
         "students": rows,
         "stats": {
             "count": len(rows),

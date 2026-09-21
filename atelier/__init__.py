@@ -84,8 +84,18 @@ def create_app(config=None):
     db.init_db(app)
     app.teardown_appcontext(db.close_db)
 
-    from . import admin, student
+    from . import admin, qcm, student
     app.register_blueprint(student.bp)
     app.register_blueprint(admin.bp)
+
+    # Les modules de QCM importes vivent dans la base, pas dans le code.
+    # Plusieurs processus servent l'application : chacun doit voir l'import
+    # fait dans un autre, d'ou cette verification a chaque requete. Elle ne
+    # coute qu'une requete quand rien n'a bouge.
+    @app.before_request
+    def load_imported_qcm():
+        from flask import request
+        if request.endpoint != "static":
+            qcm.sync()
 
     return app

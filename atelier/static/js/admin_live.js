@@ -74,7 +74,8 @@
       button.textContent = p.name;
       button.setAttribute("data-detail", p.key);
       button.setAttribute("aria-haspopup", "dialog");
-      button.title = "Voir les attendus de l'exercice";
+      button.title = p.module + " · " + (p.brief || p.name)
+        + "\n(cliquez pour voir les attendus)";
       cell.appendChild(button);
       row.appendChild(cell);
     });

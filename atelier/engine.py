@@ -297,6 +297,61 @@ def predict_from(base, key, name, why, level, dim=None, dims=None):
 
 
 # --------------------------------------------------------------------------
+# Mode « question a choix unique »
+# --------------------------------------------------------------------------
+
+QCM_CHOICES = 4          # quatre propositions, ni plus ni moins
+CHOICE_LETTERS = "ABCD"
+
+
+def qcm_pattern(key, number, question, choices, answer, level=2,
+                explanation=""):
+    """Une question a choix unique : quatre propositions, une seule juste.
+
+    Meme forme qu'un exercice de diagnostic — un menu, des phrases, un
+    retour apres coup — si bien que la correction, le bareme et la
+    surveillance s'appliquent sans rien changer.
+
+    Le nom reste court (« Q3 ») : il sert d'etiquette dans la navigation de
+    l'eleve et dans les colonnes du suivi direct, ou l'enonce entier ne
+    tiendrait pas. L'enonce, lui, est l'intitule.
+    """
+    if len(choices) != QCM_CHOICES:
+        raise ValueError("une question attend %d propositions, pas %d"
+                         % (QCM_CHOICES, len(choices)))
+    if not 0 <= answer < QCM_CHOICES:
+        raise ValueError("la bonne réponse doit être l'une des %d propositions"
+                         % QCM_CHOICES)
+
+    # L'explication n'accompagne que la bonne reponse. La livrer sur un
+    # choix faux reviendrait a donner la reponse : l'eleve n'aurait plus
+    # qu'a la recocher, et le bareme perdrait tout son sens. Celui qui
+    # epuise les quatre propositions finit de toute facon par la lire.
+    #
+    # Nommer la lettre serait faux, d'ailleurs : chaque copie recoit les
+    # propositions dans son propre ordre (cf. `shuffled_blanks`).
+    def note(index):
+        if index != answer:
+            return ""
+        return "Exact. %s" % explanation if explanation else "Exact."
+
+    return Pattern(
+        key=key,
+        name="Q%d" % number,
+        brief=question,
+        why="",
+        tpl="",
+        blanks={"choix": (question,
+                          [Option("c%d" % i, text, None, note(i))
+                           for i, text in enumerate(choices)])},
+        ref={"choix": "c%d" % answer},
+        rows=lambda _params, _get: [],
+        level=level,
+        mode="qcm",
+    )
+
+
+# --------------------------------------------------------------------------
 # Registre
 # --------------------------------------------------------------------------
 
@@ -311,6 +366,16 @@ def register(patterns):
         if pattern.key in PATTERNS:
             raise ValueError("clé d'exercice en double : %s" % pattern.key)
         PATTERNS[pattern.key] = pattern
+
+
+def unregister(keys):
+    """Retire des exercices du registre.
+
+    Sert au chapitre QCM : ses modules viennent de la base, et sont
+    rebatis a chaque import ou suppression.
+    """
+    for key in keys:
+        PATTERNS.pop(key, None)
 
 
 # Un exercice de prediction n'a pas de reponses enumerables : l'eleve ecrit
@@ -336,10 +401,15 @@ def answer_space(key):
 
 
 def specs(pattern):
-    """Tirages a effectuer pour cet exercice, sous forme homogene."""
+    """Tirages a effectuer pour cet exercice, sous forme homogene.
+
+    Une question de QCM n'a rien a tirer : son enonce est le meme pour
+    toute la classe, seul l'ordre des propositions change.
+    """
     if pattern.dims:
         return pattern.dims
-    return (pattern.dim or pattern.value,)
+    spec = pattern.dim or pattern.value
+    return (spec,) if spec else ()
 
 def draw_params(key, rng=None):
     """Tire les paramètres d'un exercice.

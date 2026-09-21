@@ -387,6 +387,15 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
 
 /* Mode « trouver le bug » : des phrases, donc des boutons radio */
 #diag-box { margin-bottom: 1.25rem; }
+/* Une question de QCM n'a ni code ni sortie : l'énoncé prend la place
+   laissée libre, et redevient ce qu'il est — la question posée. */
+.mode-qcm #diag-box { border: 0; padding: 0; }
+.mode-qcm #diag-legend {
+  display: block; padding: 0 0 .9rem; font-size: 1.15rem; line-height: 1.4;
+  font-weight: 600; max-width: 70ch;
+}
+.mode-qcm .diagnoses { max-width: 70ch; }
+.mode-qcm .diagnosis { font-size: 1rem; padding: .8rem .9rem; }
 .diagnoses { display: grid; gap: .5rem; }
 .diagnosis {
   display: flex; gap: .6rem; align-items: start;
@@ -543,6 +552,24 @@ details[open] > .module-head::before { transform: rotate(90deg); }
   text-underline-offset: 2px;
 }
 .live th.rotate button:hover { background: none; color: var(--accent); }
+/* Import d'un QCM : formulaire court, et le format replie juste dessous. */
+.qcm-import { max-width: 560px; }
+.qcm-import input[type="file"] {
+  font: inherit; padding: .5rem; border-radius: 8px;
+  background: var(--surface-0); color: var(--text-primary);
+  border: 1px dashed var(--border-strong);
+}
+.qcm-import label .hint { font-weight: 400; }
+.qcm-format { margin-top: 1.25rem; }
+.qcm-format > summary {
+  cursor: pointer; font-weight: 600; font-size: .9rem;
+  padding: .5rem 0; color: var(--text-secondary);
+}
+.qcm-format > summary:hover { color: var(--accent); }
+.qcm-format .table { font-size: .85rem; }
+.notice.ok-notice {
+  margin-top: 0; background: var(--good-bg); border-color: var(--good);
+}
 .picker { display: flex; gap: .4rem; margin-bottom: .9rem; }
 .picker .ghost { padding: .3rem .6rem; font-size: .8rem; }
 #tally { display: block; margin-top: .2rem; color: var(--text-secondary); }

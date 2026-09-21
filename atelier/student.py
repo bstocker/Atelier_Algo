@@ -229,6 +229,16 @@ def done_page():
         (student["id"],),
     )
     value = scoring.exercise_value(len(rows))
+    # « Q1 » ne dit rien hors de son module. On préfixe donc les intitulés
+    # quand la session croise plusieurs sujets, et seulement dans ce cas —
+    # même règle que la navigation de l'épreuve.
+    keys = [t["pattern_key"] for t in rows]
+    situer = len(ex.modules_for(keys)) > 1
+
+    def intitule(key):
+        name = ex.PATTERNS[key].name
+        return "%s · %s" % (ex.module_of(key).title, name) if situer else name
+
     return render_template(
         "done.html", student=student, solved=solved, total=len(rows),
         score=score, base=scoring.base_score(shares, len(rows)),
@@ -237,7 +247,7 @@ def done_page():
         clean=scoring.base_score([1.0] * solved, len(rows)),
         value=value, incidents=incidents,
         details=[{
-            "name": ex.PATTERNS[t["pattern_key"]].name,
+            "name": intitule(t["pattern_key"]),
             "solved": t["solved"],
             "attempts": t["attempts"],
             "wrong": t["wrong_attempts"],
@@ -318,6 +328,12 @@ def api_task(key):
         payload["code"] = ex.render_code(key, params)
         payload["answer"] = stored.get("answer", "")
         payload["target"] = ex.target_rows(key, params) if solved else None
+    elif pattern.mode == "qcm":
+        # Ni code ni sortie : une question, quatre propositions. L'ordre des
+        # propositions est tire par la copie, il differe d'un eleve a l'autre.
+        payload["question"] = pattern.brief
+        payload["blanks"] = ex.shuffled_blanks(key, student["token"])
+        payload["selection"] = stored
     elif pattern.mode == "debug":
         # Rien a cacher : l'ecart est sous les yeux, c'est l'expliquer
         # qui fait l'exercice.
@@ -355,18 +371,23 @@ def api_check(key):
     target = ex.target_rows(key, params)
     already = bool(task["solved"])
 
-    if pattern.mode == "debug":
-        raw = (payload.get("selection") or {}).get("cause")
-        valid = {o.id for o in pattern.blanks["cause"][1]}
+    if pattern.mode in ("debug", "qcm"):
+        # Meme forme dans les deux modes : un menu unique, des phrases, un
+        # retour apres coup. Seul l'intitule du menu et la relance changent.
+        blank_id = next(iter(pattern.blanks))
+        raw = (payload.get("selection") or {}).get(blank_id)
+        valid = {o.id for o in pattern.blanks[blank_id][1]}
         chosen = raw if raw in valid else None
         if chosen is None:
             touch(student["id"])
             return jsonify({"complete": False, "ok": False,
-                            "message": "Choisissez une cause."})
+                            "message": "Choisissez une cause."
+                                       if pattern.mode == "debug"
+                                       else "Choisissez une réponse."})
         execute("UPDATE task SET selection = ? WHERE id = ?",
-                (json.dumps({"cause": chosen}), task["id"]))
-        ok = chosen == pattern.ref["cause"]
-        note = ex.option_note(key, "cause", chosen)
+                (json.dumps({blank_id: chosen}), task["id"]))
+        ok = chosen == pattern.ref[blank_id]
+        note = ex.option_note(key, blank_id, chosen)
         produced, diff, trace, infinite = None, None, None, False
     elif pattern.mode == "predict":
         answer = (payload.get("answer") or "")[:4000]
@@ -431,7 +452,7 @@ def api_check(key):
         "progress": progress_of(student),
     }
 
-    if pattern.mode == "debug":
+    if pattern.mode in ("debug", "qcm"):
         body["note"] = note
         return jsonify(body)
 

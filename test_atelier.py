@@ -1,15 +1,17 @@
 """Tests de bout en bout : session, exercices, penalites, notation."""
 
+import io
 import itertools
 import json
 import os
 import shutil
 import tempfile
 import unittest
+import urllib.parse
 
 from markupsafe import escape
 
-from atelier import create_app, db, load_env_file, exercises as ex, scoring
+from atelier import create_app, db, load_env_file, exercises as ex, qcm, scoring
 
 
 def tirages(pattern):
@@ -547,9 +549,15 @@ class AtelierTest(unittest.TestCase):
                 self.assertEqual(data["name"], pattern.name)
                 self.assertEqual(data["module"], ex.module_of(key).title)
                 self.assertEqual(data["chapter"], ex.chapter_of(key).title)
-                self.assertTrue(data["target"])
-                # Le code descend complet : aucun @trou@ ne subsiste.
-                self.assertNotIn("@", data["code"])
+                if pattern.mode == "qcm":
+                    # Ni code ni sortie : une question et ses propositions.
+                    self.assertEqual(data["target"], [])
+                    self.assertEqual(data["code"], "")
+                    self.assertTrue(data["brief"])
+                else:
+                    self.assertTrue(data["target"])
+                    # Le code descend complet : aucun @trou@ ne subsiste.
+                    self.assertNotIn("@", data["code"])
                 for blank in data["blanks"]:
                     bonnes = [o for o in blank["options"] if o["ok"]]
                     self.assertEqual(len(bonnes), 1, blank["id"])
@@ -713,6 +721,407 @@ class AtelierTest(unittest.TestCase):
         self.assertEqual(client.get("/api/task/losange").status_code, 404)
         self.assertEqual(client.post("/api/task/carre_magique/check",
                                      json={"selection": {}}).status_code, 404)
+
+
+class QcmTest(unittest.TestCase):
+    """Chapitre QCM : import Excel, sous-modules, réponse de l'élève."""
+
+    EN_TETE = ("Question", "Réponse A", "Réponse B", "Réponse C", "Réponse D",
+               "Bonne réponse", "Explication", "Niveau")
+
+    QUESTIONS = (
+        ("Que fait `git clone` ?", "Copie un dépôt distant en local",
+         "Envoie vos commits", "Crée une branche", "Efface l'historique",
+         "A", "C'est la première commande du cycle.", 1),
+        ("Que fait `git push` ?", "Crée un dépôt",
+         "Envoie les commits locaux au dépôt distant", "Annule un commit",
+         "Liste les branches", "B", "", 3),
+    )
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.app = create_app({
+            "TESTING": True, "DATABASE": self.path, "SECRET_KEY": "test",
+            "ADMIN_USER": "prof", "ADMIN_PASSWORD": "secret",
+        })
+        self.admin = self.app.test_client()
+        self.admin.post("/admin/login",
+                        data={"username": "prof", "password": "secret"})
+
+    def tearDown(self):
+        # Le registre est un état de processus : un module importé par un
+        # test suivrait les suivants si on ne le vidait pas. On repart du
+        # catalogue livré, sans relire la base — elle va disparaître.
+        ex.refresh([])
+        qcm._loaded = None
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    # -- utilitaires -------------------------------------------------------
+
+    def workbook(self, rows=None, header=None):
+        from openpyxl import Workbook
+        book = Workbook()
+        sheet = book.active
+        sheet.append(header if header is not None else self.EN_TETE)
+        for row in (self.QUESTIONS if rows is None else rows):
+            sheet.append(row)
+        buffer = io.BytesIO()
+        book.save(buffer)
+        return buffer.getvalue()
+
+    def upload(self, data=None, title="Git : les bases", summary="",
+               filename="git.xlsx"):
+        return self.admin.post(
+            "/admin/qcm",
+            data={"title": title, "summary": summary,
+                  "workbook": (io.BytesIO(self.workbook() if data is None
+                                          else data), filename)},
+            content_type="multipart/form-data",
+        )
+
+    def refusal(self, response):
+        """Le message d'erreur d'un import refusé, tel que l'enseignant le lit."""
+        location = response.headers["Location"]
+        self.assertIn("error=", location)
+        return urllib.parse.unquote_plus(location.split("error=")[-1])
+
+    def session_on(self, keys):
+        resp = self.admin.post("/admin/sessions",
+                               data={"title": "TP QCM", "patterns": list(keys)})
+        session_id = int(resp.headers["Location"].rstrip("/").split("/")[-1])
+        self.admin.post("/admin/sessions/%d/open" % session_id)
+        html = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        code = html.split('class="joincode mono">')[1].split("<")[0].strip()
+        client = self.app.test_client()
+        client.post("/join", data={"first_name": "Ada", "last_name": "Lovelace",
+                                   "code": code})
+        return session_id, client
+
+    # -- le module livré ---------------------------------------------------
+
+    def test_the_qcm_chapter_ships_with_a_docker_module(self):
+        chapitre = [c for c in ex.CHAPTERS if c.key == ex.QCM_CHAPTER_KEY]
+        self.assertEqual(len(chapitre), 1)
+        self.assertIn("qcm_docker", [m.key for m in chapitre[0].modules])
+        module = ex.MODULE_BY_KEY["qcm_docker"]
+        self.assertTrue(module.keys)
+        for key in module.keys:
+            with self.subTest(question=key):
+                pattern = ex.PATTERNS[key]
+                self.assertEqual(pattern.mode, "qcm")
+                self.assertEqual(len(pattern.blanks["choix"][1]), 4)
+                self.assertEqual(ex.answer_space(key), 4)
+
+    def test_every_question_has_exactly_one_right_answer(self):
+        for key in ex.ALL_KEYS:
+            pattern = ex.PATTERNS[key]
+            if pattern.mode != "qcm":
+                continue
+            with self.subTest(question=key):
+                options = pattern.blanks["choix"][1]
+                justes = [o for o in options if o.id == pattern.ref["choix"]]
+                self.assertEqual(len(justes), 1)
+                # Quatre propositions distinctes : deux identiques rendraient
+                # une réponse juste indiscernable d'une fausse.
+                self.assertEqual(len({o.c for o in options}), 4)
+
+    def test_a_wrong_choice_never_reveals_the_answer(self):
+        """Commenter une erreur reviendrait à donner la réponse."""
+        for key in ex.MODULE_BY_KEY["qcm_docker"].keys:
+            pattern = ex.PATTERNS[key]
+            for option in pattern.blanks["choix"][1]:
+                if option.id != pattern.ref["choix"]:
+                    with self.subTest(question=key, choix=option.id):
+                        self.assertEqual(option.note, "")
+
+    # -- import ------------------------------------------------------------
+
+    def test_an_import_creates_a_new_sub_module(self):
+        self.upload(summary="Cloner, committer, pousser.")
+        module = ex.MODULE_BY_KEY["git-les-bases"]
+        self.assertEqual(module.title, "Git : les bases")
+        self.assertEqual(module.summary, "Cloner, committer, pousser.")
+        self.assertEqual(len(module.keys), 2)
+        # Le niveau du module résume celui de ses questions : 1 et 3 -> 2.
+        self.assertEqual(module.level, 2)
+        self.assertEqual(ex.chapter_of(module.keys[0]).key, ex.QCM_CHAPTER_KEY)
+
+        question = ex.PATTERNS[module.keys[0]]
+        self.assertEqual(question.name, "Q1")
+        self.assertEqual(question.brief, "Que fait `git clone` ?")
+        self.assertEqual(question.level, 1)
+        juste = [o for o in question.blanks["choix"][1]
+                 if o.id == question.ref["choix"]][0]
+        self.assertEqual(juste.c, "Copie un dépôt distant en local")
+
+    def test_the_imported_module_appears_in_the_catalogue(self):
+        self.upload()
+        html = self.admin.get("/admin/").get_data(as_text=True)
+        self.assertIn("Git : les bases", html)
+        self.assertIn('data-module="git-les-bases"', html)
+        self.assertIn('data-detail="qcm_git_les_bases_001"', html)
+
+    def test_two_imports_of_the_same_title_keep_both(self):
+        self.upload()
+        self.upload()
+        cles = [m.key for m in ex.MODULES]
+        self.assertIn("git-les-bases", cles)
+        self.assertIn("git-les-bases-2", cles)
+        # Les clés de question restent uniques : le registre les refuserait.
+        self.assertEqual(len(ex.ALL_KEYS), len(set(ex.ALL_KEYS)))
+
+    def test_the_headers_are_read_without_case_or_accents(self):
+        entete = ("QUESTION", "reponse a", "Reponse B", "réponse c",
+                  "RÉPONSE D", "bonne reponse", "explication", "niveau")
+        self.upload(data=self.workbook(header=entete))
+        self.assertIn("git-les-bases", [m.key for m in ex.MODULES])
+
+    def test_the_answer_may_be_a_letter_or_a_number(self):
+        lignes = (("Q1 ?", "a", "b", "c", "d", "C", "", 2),
+                  ("Q2 ?", "a", "b", "c", "d", "2", "", 2))
+        self.upload(data=self.workbook(rows=lignes))
+        module = ex.MODULE_BY_KEY["git-les-bases"]
+        self.assertEqual(ex.PATTERNS[module.keys[0]].ref["choix"], "c2")
+        self.assertEqual(ex.PATTERNS[module.keys[1]].ref["choix"], "c1")
+
+    def test_blank_rows_are_ignored(self):
+        lignes = (("Q1 ?", "a", "b", "c", "d", "A", "", 2),
+                  (None, None, None, None, None, None, None, None),
+                  ("Q2 ?", "a", "b", "c", "d", "B", "", 2))
+        self.upload(data=self.workbook(rows=lignes))
+        self.assertEqual(len(ex.MODULE_BY_KEY["git-les-bases"].keys), 2)
+
+    def test_a_refused_workbook_says_what_is_wrong(self):
+        cas = [
+            (self.workbook(header=("Question", "Réponse A", "Réponse B",
+                                   "Réponse C", "Bonne réponse")),
+             "Réponse D"),
+            (self.workbook(rows=(("Q ?", "a", "b", "c", "d", "Z", "", 2),)),
+             "A, B, C ou D"),
+            (self.workbook(rows=(("Q ?", "a", "", "c", "d", "A", "", 2),)),
+             "proposition B vide"),
+            (self.workbook(rows=(("Q ?", "a", "a", "c", "d", "A", "", 2),)),
+             "identiques"),
+            (self.workbook(rows=(("", "a", "b", "c", "d", "A", "", 2),)),
+             "question est vide"),
+            (self.workbook(rows=(("Q ?", "a", "b", "c", "d", "A", "", 9),)),
+             "échelle 1 à 4"),
+            (self.workbook(rows=()), "Aucune question"),
+            (b"ceci n'est pas un classeur", "Fichier illisible"),
+        ]
+        for data, attendu in cas:
+            with self.subTest(attendu=attendu):
+                self.assertIn(attendu, self.refusal(self.upload(data=data)))
+        # Rien n'a été enregistré au passage.
+        with self.app.app_context():
+            self.assertEqual(qcm.imported(), [])
+
+    def test_an_import_without_a_file_is_refused(self):
+        resp = self.admin.post("/admin/qcm", data={"title": "X"},
+                               content_type="multipart/form-data")
+        self.assertIn("fichier", self.refusal(resp))
+
+    def test_importing_requires_an_admin_session(self):
+        anon = self.app.test_client()
+        self.assertEqual(anon.post("/admin/qcm").status_code, 302)
+        self.assertEqual(anon.get("/admin/qcm/modele.xlsx").status_code, 302)
+
+    # -- le modèle ---------------------------------------------------------
+
+    def test_the_model_can_be_imported_back(self):
+        """Le format documenté et le format accepté ne peuvent pas diverger."""
+        model = self.admin.get("/admin/qcm/modele.xlsx")
+        self.assertEqual(model.status_code, 200)
+        self.assertIn("modele-qcm.xlsx", model.headers["Content-Disposition"])
+
+        self.upload(data=model.data, title="Docker relu",
+                    filename="modele-qcm.xlsx")
+        livre = ex.MODULE_BY_KEY["qcm_docker"]
+        relu = ex.MODULE_BY_KEY["docker-relu"]
+        self.assertEqual(len(relu.keys), len(livre.keys))
+        for avant, apres in zip(livre.keys, relu.keys):
+            with self.subTest(question=avant):
+                a, b = ex.PATTERNS[avant], ex.PATTERNS[apres]
+                self.assertEqual(a.brief, b.brief)
+                self.assertEqual(a.level, b.level)
+                self.assertEqual([o.c for o in a.blanks["choix"][1]],
+                                 [o.c for o in b.blanks["choix"][1]])
+                self.assertEqual(a.ref["choix"], b.ref["choix"])
+
+    def test_the_application_runs_without_openpyxl(self):
+        """L'hébergeur n'installe pas les paquets : l'absence doit se dire."""
+        import builtins
+        classeur = self.workbook()      # fabriqué tant qu'openpyxl est là
+        vrai_import = builtins.__import__
+
+        def sans_openpyxl(name, *args, **kwargs):
+            if name == "openpyxl" or name.startswith("openpyxl."):
+                raise ImportError("No module named 'openpyxl'")
+            return vrai_import(name, *args, **kwargs)
+
+        builtins.__import__ = sans_openpyxl
+        try:
+            # Les pages continuent de répondre : seul l'import est indisponible.
+            self.assertEqual(self.admin.get("/admin/").status_code, 200)
+            self.assertIn("pip install --user openpyxl",
+                          self.refusal(self.upload(data=classeur)))
+            modele = self.admin.get("/admin/qcm/modele.xlsx")
+            self.assertIn("openpyxl",
+                          urllib.parse.unquote_plus(modele.headers["Location"]))
+        finally:
+            builtins.__import__ = vrai_import
+
+    # -- suppression -------------------------------------------------------
+
+    def test_an_unused_module_can_be_deleted(self):
+        self.upload()
+        resp = self.admin.post("/admin/qcm/git-les-bases/delete")
+        self.assertIn("ok=", resp.headers["Location"])
+        self.assertNotIn("git-les-bases", [m.key for m in ex.MODULES])
+        self.assertNotIn("qcm_git_les_bases_001", ex.PATTERNS)
+
+    def test_a_module_used_by_a_session_is_not_deleted(self):
+        """Supprimer ses questions viderait les copies qui les citent."""
+        self.upload()
+        keys = ex.MODULE_BY_KEY["git-les-bases"].keys
+        self.session_on(keys)
+        message = self.refusal(self.admin.post("/admin/qcm/git-les-bases/delete"))
+        self.assertIn("TP QCM", message)
+        self.assertIn("git-les-bases", [m.key for m in ex.MODULES])
+
+    def test_deleting_an_unknown_module_says_so(self):
+        self.assertIn("introuvable",
+                      self.refusal(self.admin.post("/admin/qcm/néant/delete")))
+
+    # -- côté élève --------------------------------------------------------
+
+    def test_a_student_answers_a_question(self):
+        self.upload()
+        keys = ex.MODULE_BY_KEY["git-les-bases"].keys
+        _, client = self.session_on(keys)
+
+        task = client.get("/api/task/" + keys[0]).get_json()
+        self.assertEqual(task["mode"], "qcm")
+        self.assertEqual(task["question"], "Que fait `git clone` ?")
+        self.assertEqual(task["module"], "Git : les bases")
+        # Ni code ni sortie : la question se suffit.
+        self.assertNotIn("code", task)
+        self.assertNotIn("target", task)
+        self.assertEqual(len(task["blanks"][0]["options"]), 4)
+
+        juste = ex.PATTERNS[keys[0]].ref["choix"]
+        faux = [o["id"] for o in task["blanks"][0]["options"]
+                if o["id"] != juste][0]
+        rate = client.post("/api/task/%s/check" % keys[0],
+                           json={"selection": {"choix": faux}}).get_json()
+        self.assertFalse(rate["ok"])
+        self.assertEqual(rate["note"], "")       # la réponse n'est pas donnée
+        self.assertEqual(rate["stakes"]["wrong"], 1)
+
+        gagne = client.post("/api/task/%s/check" % keys[0],
+                            json={"selection": {"choix": juste}}).get_json()
+        self.assertTrue(gagne["ok"])
+        self.assertIn("première commande", gagne["note"])
+        # Quatre propositions, trois fausses : un tiers de 10 points.
+        self.assertEqual(gagne["progress"]["score"], 6.67)
+
+    def test_the_options_are_shuffled_per_student(self):
+        """Deux voisins n'ont pas les propositions dans le même ordre."""
+        self.upload()
+        key = ex.MODULE_BY_KEY["git-les-bases"].keys[0]
+        session_id, first = self.session_on([key])
+        html = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        code = html.split('class="joincode mono">')[1].split("<")[0].strip()
+        second = self.app.test_client()
+        second.post("/join", data={"first_name": "Grace", "last_name": "Hopper",
+                                   "code": code})
+        ordres = [[o["id"] for o in client.get("/api/task/" + key)
+                                          .get_json()["blanks"][0]["options"]]
+                  for client in (first, second)]
+        self.assertNotEqual(ordres[0], ordres[1])
+        self.assertEqual(sorted(ordres[0]), sorted(ordres[1]))
+
+    def test_no_answer_chosen_is_not_an_attempt(self):
+        self.upload()
+        key = ex.MODULE_BY_KEY["git-les-bases"].keys[0]
+        _, client = self.session_on([key])
+        res = client.post("/api/task/%s/check" % key,
+                          json={"selection": {}}).get_json()
+        self.assertFalse(res["complete"])
+        self.assertIn("réponse", res["message"])
+        self.assertEqual(client.get("/api/task/" + key)
+                               .get_json()["stakes"]["wrong"], 0)
+
+    def test_the_api_never_sends_the_right_answer_before_it_is_found(self):
+        self.upload()
+        key = ex.MODULE_BY_KEY["git-les-bases"].keys[0]
+        _, client = self.session_on([key])
+        envoye = json.dumps(client.get("/api/task/" + key).get_json())
+        self.assertNotIn("choix", json.loads(envoye).get("selection", {}))
+        self.assertNotIn("ref", envoye)
+        self.assertNotIn("première commande", envoye)   # l'explication
+
+    def test_a_qcm_session_is_proctored_like_any_other(self):
+        """Un QCM se passe sous les mêmes règles : plein écran et surveillance."""
+        self.upload()
+        keys = ex.MODULE_BY_KEY["git-les-bases"].keys
+        _, client = self.session_on(keys)
+        page = client.get("/exercice").get_data(as_text=True)
+        self.assertIn("plein écran", page)
+        self.assertIn("js/proctor.js", page)
+        res = client.post("/api/incident", json={"kind": "blur"}).get_json()
+        self.assertEqual(res["ordinal"], 1)
+
+    def test_a_session_may_mix_a_qcm_and_c_exercises(self):
+        self.upload()
+        keys = [ex.MODULE_BY_KEY["git-les-bases"].keys[0], "carre"]
+        _, client = self.session_on(keys)
+        me = client.get("/api/me").get_json()
+        self.assertEqual(me["modules"], ["Les boucles", "Git : les bases"])
+        self.assertEqual(me["progress"]["total"], 2)
+
+    def test_the_report_situates_short_question_names(self):
+        """« Q1 » ne dit rien hors de son module : on le nomme si besoin."""
+        self.upload()
+        keys = [ex.MODULE_BY_KEY["git-les-bases"].keys[0], "carre"]
+        _, client = self.session_on(keys)
+        client.post("/api/finish")
+        page = client.get("/termine").get_data(as_text=True)
+        self.assertIn("Git : les bases · Q1", page)
+
+        # Un seul module : le préfixe n'apporterait que du bruit.
+        _, seul = self.session_on([ex.MODULE_BY_KEY["git-les-bases"].keys[0]])
+        seul.post("/api/finish")
+        page = seul.get("/termine").get_data(as_text=True)
+        self.assertNotIn("Git : les bases · Q1", page)
+
+    # -- rechargement entre processus --------------------------------------
+
+    def test_another_process_picks_up_the_import(self):
+        """Un import fait ailleurs doit apparaître à la requête suivante."""
+        self.upload()
+        autre = create_app({
+            "TESTING": True, "DATABASE": self.path, "SECRET_KEY": "test",
+            "ADMIN_USER": "prof", "ADMIN_PASSWORD": "secret",
+        })
+        # On simule un processus resté sur le catalogue d'avant l'import :
+        # son empreinte est celle d'une base sans aucun QCM importé.
+        ex.refresh([])
+        qcm._loaded = (0, 0, 0)
+        self.assertNotIn("git-les-bases", [m.key for m in ex.MODULES])
+
+        client = autre.test_client()
+        client.post("/admin/login",
+                    data={"username": "prof", "password": "secret"})
+        client.get("/admin/")
+        self.assertIn("git-les-bases", [m.key for m in ex.MODULES])
 
 
 class MigrationTest(unittest.TestCase):

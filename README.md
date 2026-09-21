@@ -115,13 +115,14 @@ Trois conséquences à connaître :
 ### Ouvrir votre première session
 
 1. Rendez-vous sur `/admin/login` et connectez-vous avec `ATELIER_ADMIN_USER` / `ATELIER_ADMIN_PASSWORD`.
-2. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par chapitre, module puis niveau**, avec un bouton pour cocher un chapitre, un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
+2. *(facultatif)* Pour ajouter vos propres QCM : carte **Importer un QCM**, bouton **Télécharger le modèle**, remplissez-le, redéposez-le. Le sous-module apparaît aussitôt sous le chapitre **QCM**. Format détaillé plus bas.
+3. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par chapitre, module puis niveau**, avec un bouton pour cocher un chapitre, un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
    Chapitres et modules **se replient** : le catalogue se parcourt sans dérouler cinquante-cinq intitulés, et chaque en-tête replié affiche le compte de ses exercices cochés. Les plis suivent l'enseignant d'une visite à l'autre.
    Un clic sur le **titre d'un exercice** ouvre sa fiche : voir plus bas.
-3. Cliquez sur **Lancer la session**.
-4. Copiez le **lien à transmettre** et envoyez-le à vos étudiants. Le code y est déjà : ils n'ont que leur nom et leur prénom à saisir. Le code reste affiché à côté si vous préférez le dicter.
-5. Suivez leurs réponses en direct sur la même page.
-6. Cliquez sur **Terminer la session** : les notes sont figées et la session bascule dans l'historique.
+4. Cliquez sur **Lancer la session**.
+5. Copiez le **lien à transmettre** et envoyez-le à vos étudiants. Le code y est déjà : ils n'ont que leur nom et leur prénom à saisir. Le code reste affiché à côté si vous préférez le dicter.
+6. Suivez leurs réponses en direct sur la même page.
+7. Cliquez sur **Terminer la session** : les notes sont figées et la session bascule dans l'historique.
 
 
 ---------------------------------------------------
@@ -156,9 +157,11 @@ Une épreuve surveillée sur les **bases du langage C**. L'étudiant ne produit 
 
 Le catalogue a trois étages : **chapitre → module → exercice**.
 
-Un **chapitre** réunit des modules d'un même domaine — aujourd'hui « Langage C ». Un **module** porte un titre, un niveau indicatif et un résumé. Chaque **exercice** garde son propre niveau, plus fin, et son mode.
+Un **chapitre** réunit des modules d'un même domaine. Un **module** porte un titre, un niveau indicatif et un résumé. Chaque **exercice** garde son propre niveau, plus fin, et son mode.
 
-**55 exercices** répartis en six modules :
+Deux chapitres aujourd'hui : **Langage C**, décrit en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
+
+**55 exercices de C** répartis en six modules :
 
 | Module | Niveau | Exercices | Ce qu'il fait travailler |
 | --- | --- | --- | --- |
@@ -169,7 +172,7 @@ Un **chapitre** réunit des modules d'un même domaine — aujourd'hui « Langag
 | Les arguments | ●●○○ | 7 | `argc`, `argv`, `atoi`, et le piège de `argv[0]` |
 | Itératif et récursif | ●●●○ | 6 | Cas d'arrêt, pas, débordement de pile |
 
-**Ajouter un module** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre.
+**Ajouter un module de C** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre. **Ajouter un QCM** ne demande pas de code du tout : un classeur Excel déposé depuis la console suffit.
 
 ```python
 # atelier/modules/pointeurs.py
@@ -187,12 +190,70 @@ Trois modes coexistent :
 | **Compléter** (12) | Choisit les conditions de boucle dans des menus | Un menu déroulant ne se colle pas dans une IA |
 | **Prédire** (2) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
 | **Trouver le bug** (4) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
+| **QCM** | Choisit l'une des quatre propositions | Propositions mélangées par copie, et un essai manqué coûte |
 
-Dans les trois modes, un essai manqué entame la valeur du motif.
+Dans les quatre modes, un essai manqué entame la valeur du motif.
 
 **La taille de chaque motif est tirée au hasard par étudiant** : deux voisins n'ont pas la même cible. La correction est faite **côté serveur** — le navigateur ne reçoit jamais la réponse attendue.
 
 **Un essai manqué coûte des points sur le motif en cours** : essayer les réponses une par une jusqu'à tomber juste ramène le motif à zéro. Voir **Le coût d'un essai manqué**.
+
+### Le chapitre QCM
+
+Des questionnaires à choix unique : **une question, quatre propositions, une seule juste**. Ils se composent, se passent, se corrigent et se notent exactement comme les exercices de C — même écran, même surveillance, même barème. L'ordre des propositions est tiré par copie : deux voisins ne voient pas les mêmes lettres.
+
+Le chapitre est livré avec **« Docker : les bases »** (15 questions), décrit en Python comme les modules de C. Les autres modules viennent de la base : **un classeur Excel déposé depuis la console devient un sous-module**, utilisable dans la foulée.
+
+**Importer un QCM.** Sur `/admin/`, carte **Importer un QCM** : un intitulé, un résumé facultatif, un fichier `.xlsx`. Le sous-module apparaît aussitôt sous le chapitre QCM du formulaire de composition. Un QCM utilisé par une session ne peut pas être supprimé — cela viderait les copies qui le citent.
+
+#### Structure du fichier Excel
+
+Première feuille du classeur. La **première ligne porte les intitulés**, chaque ligne suivante une question. Les intitulés sont reconnus **sans tenir compte de la casse ni des accents**, et **l'ordre des colonnes est libre**.
+
+| Colonne | Obligatoire | Contenu |
+| --- | --- | --- |
+| `Question` | oui | L'énoncé |
+| `Réponse A` | oui | Première proposition |
+| `Réponse B` | oui | Deuxième proposition |
+| `Réponse C` | oui | Troisième proposition |
+| `Réponse D` | oui | Quatrième proposition |
+| `Bonne réponse` | oui | `A`, `B`, `C` ou `D` — ou `1` à `4` |
+| `Explication` | non | Montrée à l'élève **une fois la réponse trouvée** |
+| `Niveau` | non | `1` à `4`, défaut `2` — sert au repérage de l'enseignant |
+
+Exemple :
+
+| Question | Réponse A | Réponse B | Réponse C | Réponse D | Bonne réponse | Explication | Niveau |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Qu'est-ce qu'une image Docker ? | Un conteneur en cours d'exécution | Un modèle en lecture seule dont on lance des conteneurs | Une machine virtuelle complète | Un fichier de configuration | B | L'image est le gabarit figé ; le conteneur en est une instance vivante. | 1 |
+| Quelle commande liste les conteneurs qui tournent ? | docker images | docker ls | docker ps | docker run | C | `docker ps` liste les conteneurs, `docker images` les images. | 1 |
+
+Les règles, et ce que l'import refuse :
+
+- **Quatre propositions par question**, toutes remplies et toutes différentes. Deux propositions identiques rendraient une réponse juste indiscernable d'une fausse.
+- Les lignes entièrement vides sont ignorées — un classeur finit souvent par des lignes fantômes.
+- Le niveau du module est la **moyenne** de celui de ses questions.
+- Un classeur refusé l'est **en entier** : rien n'est enregistré à moitié. Le message dit quelle ligne pose problème et ce qui était attendu.
+
+**Le modèle.** Le bouton **Télécharger le modèle** rend un `.xlsx` prêt à remplir, **rempli avec le QCM Docker**. Il n'est pas écrit à la main : il est produit à partir du module livré, puis relu par le même analyseur que les fichiers de l'enseignant. Le format documenté et le format accepté ne peuvent donc pas diverger — un test vérifie l'aller-retour question par question.
+
+⚠️ Le `.xls` et le `.csv` ne sont pas lus : enregistrez d'abord au format `.xlsx`.
+
+**La dépendance openpyxl.** La lecture des classeurs passe par **openpyxl**, qui est **déjà installé sur PythonAnywhere** (vérifié : 3.1.5, la version épinglée dans `requirements.txt`). Rien à faire, donc. En développement local, `pip install -r requirements.txt` suffit.
+
+Le workflow de déploiement téléverse des fichiers, il n'installe pas de paquet : si l'import venait à manquer la bibliothèque — un autre hébergeur, ou une version de Python du site différente de celle de la console — l'application démarrerait quand même. Les exercices de C et le QCM Docker resteraient là, et seuls l'import et le modèle répondraient par un message donnant la commande à taper :
+
+```
+pip install --user openpyxl
+```
+
+Le plus simple pour s'en assurer après un déploiement : cliquer sur **Télécharger le modèle**. S'il arrive, la lecture des classeurs fonctionne.
+
+#### Où vit un QCM importé
+
+Dans la base — tables `qcm_module` et `qcm_question` — et non dans le code : un fichier déposé sur PythonAnywhere serait écrasé au déploiement suivant.
+
+Plusieurs processus servent l'application, et un import fait dans l'un doit être vu par les autres. `qcm.sync()` compare donc à chaque requête une **empreinte** de la base (nombre de modules, nombre de questions, dernier identifiant) au catalogue chargé, et ne rebâtit le registre que lorsqu'elle a changé. Le cas courant ne coûte qu'une requête.
 
 ### Surveillance de la fenêtre
 
@@ -360,6 +421,7 @@ Un motif à `r` réponses en a `r − 1` de fausses : les avoir toutes essayées
 | Deux menus de quatre options | 16 | 1/15 de sa valeur | 15 essais manqués |
 | Diagnostic (quatre causes) | 4 | ⅓ de sa valeur | 3 essais manqués |
 | Prédiction (texte libre) | — | ⅓ de sa valeur | 3 essais manqués |
+| Question de QCM | 4 | ⅓ de sa valeur | 3 essais manqués |
 
 La prédiction n'a pas de réponses énumérables : elle reçoit l'allocation d'un menu à quatre options (`PREDICT_CHOICES`, dans `engine.py`), pour que l'acharnement y coûte comme ailleurs.
 
@@ -368,6 +430,7 @@ Trois garde-fous accompagnent la règle :
 - **L'élève est prévenu avant de jouer**, jamais après. L'écran d'accueil énonce la règle, et chaque motif porte une pastille qui dit ce qu'il vaut encore et ce qu'un essai manqué lui coûtera. Un barème qui sanctionne en silence serait un piège.
 - **Un menu incomplet n'est pas un essai** : la réponse est refusée avant d'être comptée.
 - **Un motif déjà validé ne peut plus rien perdre** : on peut y revenir pour comprendre, sans risque.
+- **Un QCM ne commente pas les mauvaises réponses.** L'explication n'arrive qu'une fois la bonne trouvée : la livrer plus tôt reviendrait à donner la réponse, et il suffirait de la recocher. Celui qui épuise les quatre propositions finit de toute façon par la lire.
 
 Un motif jamais trouvé ne rapporte rien, quels qu'aient été les essais : la perte s'arrête à zéro et ne mord pas sur les autres motifs.
 
@@ -389,6 +452,9 @@ Côté enseignant, les essais manqués remontent dans le suivi direct (une tuile
 | `/admin/` | enseignant | Créer une session, lister celles en cours |
 | `/admin/sessions/<id>` | enseignant | Lancer, suivre en direct, terminer |
 | `/admin/api/patterns/<clé>` | enseignant | Les attendus d'un exercice, pour sa fiche |
+| `/admin/qcm` | enseignant | Importer un classeur Excel (POST) |
+| `/admin/qcm/modele.xlsx` | enseignant | Le modèle à remplir, rempli du QCM Docker |
+| `/admin/qcm/<clé>/delete` | enseignant | Retirer un QCM importé (POST) |
 | `/admin/historique` | enseignant | Sessions closes, moyennes, export |
 | `/admin/sessions/<id>/export.csv` | enseignant | Notes au format CSV (séparateur `;`) |
 
@@ -401,12 +467,14 @@ outils/logo.py          Régénère les déclinaisons du logo
 atelier/
   __init__.py           Fabrique d'application et configuration
   db.py                 Connexion SQLite, une par requête
-  schema.sql            Schéma (session, student, task, incident)
+  schema.sql            Schéma (session, student, task, incident, qcm_*)
   engine.py             Socle du moteur : structures, fabriques, correction
   exercises.py          Catalogue : chapitres, modules, registre
+  qcm.py                Chapitre QCM : import Excel, modèle, rechargement
   modules/              Un fichier par module d'exercices
     boucles.py  conditions.py  chaines.py
     tableaux.py  recursif.py   arguments.py
+    qcm_docker.py       Le QCM livré avec l'application
   scoring.py            Barème : valeur d'un motif, essais manqués, pénalités
   student.py            Parcours étudiant et API
   admin.py              Espace enseignant, suivi direct, historique

@@ -52,6 +52,33 @@ CREATE TABLE IF NOT EXISTS incident (
     created_at TEXT    NOT NULL
 );
 
+-- Chapitre QCM : les modules importes au format Excel. Les modules livres
+-- avec l'application, eux, restent decrits en Python dans atelier/modules/.
+CREATE TABLE IF NOT EXISTS qcm_module (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    key         TEXT    NOT NULL UNIQUE,     -- cle de module, derivee du titre
+    title       TEXT    NOT NULL,
+    summary     TEXT    NOT NULL DEFAULT '',
+    level       INTEGER NOT NULL DEFAULT 2,
+    source      TEXT    NOT NULL DEFAULT '', -- nom du fichier importe
+    imported_at TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS qcm_question (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_id   INTEGER NOT NULL REFERENCES qcm_module(id) ON DELETE CASCADE,
+    key         TEXT    NOT NULL UNIQUE,     -- cle de motif, unique au registre
+    position    INTEGER NOT NULL,
+    question    TEXT    NOT NULL,
+    choices     TEXT    NOT NULL,            -- JSON : les quatre propositions
+    answer      INTEGER NOT NULL,            -- indice de la bonne, de 0 a 3
+    level       INTEGER NOT NULL DEFAULT 2,
+    explanation TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_qcm_question_module
+    ON qcm_question(module_id, position);
+
 CREATE INDEX IF NOT EXISTS idx_task_student ON task(student_id);
 CREATE INDEX IF NOT EXISTS idx_incident_student ON incident(student_id);
 CREATE INDEX IF NOT EXISTS idx_student_session ON student(session_id);

@@ -14,6 +14,7 @@
     module: document.getElementById("task-module"),
     level: document.getElementById("task-level"),
     brief: document.getElementById("task-brief"),
+    panel: document.querySelector(".panel"),
     state: document.getElementById("task-state"),
     stakes: document.getElementById("task-stakes"),
     target: document.getElementById("target"),
@@ -319,11 +320,12 @@
 
       var input = document.createElement("input");
       input.type = "radio";
-      input.name = "cause";
+      input.name = blank.id;
       input.value = opt.id;
-      input.checked = selection.cause === opt.id;
+      input.checked = selection[blank.id] === opt.id;
       input.addEventListener("change", function () {
-        selection = { cause: opt.id };
+        selection = {};
+        selection[blank.id] = opt.id;
         el.diagNote.hidden = true;
         el.feedback.textContent = "";
         el.feedback.className = "feedback";
@@ -341,11 +343,21 @@
   function applyMode(data) {
     var predict = data.mode === "predict";
     var debug = data.mode === "debug";
+    var qcm = data.mode === "qcm";
 
+    // Le mode est posé sur le panneau : le CSS s'en sert pour donner à
+    // l'énoncé d'un QCM la place d'une vraie question.
+    el.panel.className = "panel mode-" + data.mode;
     el.predictBox.hidden = !predict;
-    el.diagBox.hidden = !debug;
-    el.blanks.hidden = predict || debug;
+    el.diagBox.hidden = !(debug || qcm);
+    el.blanks.hidden = predict || debug || qcm;
     el.diagNote.hidden = true;
+
+    // Une question de QCM n'a ni code ni sortie : tout le volet
+    // « programme » disparaît, il ne reste que l'énoncé et les propositions.
+    el.panes.hidden = qcm;
+    el.codeTitle.hidden = qcm;
+    el.code.hidden = qcm;
 
     // La cible EST la réponse en mode prédiction : son volet ne réapparaît
     // qu'une fois l'exercice trouvé.
@@ -356,6 +368,7 @@
                                                   : "Code à compléter";
     el.check.textContent = predict ? "Vérifier ma prédiction"
                          : debug   ? "Valider mon diagnostic"
+                         : qcm     ? "Valider ma réponse"
                                    : "Compiler et exécuter";
     el.targetTitle.textContent = debug ? "Ce que le code devrait produire"
                                        : "Motif à reproduire";
@@ -375,8 +388,8 @@
       // L'écart est visible d'emblée : c'est l'expliquer qui fait l'exercice.
       renderLines(el.output, data.actual,
                   data.actual.map(function () { return false; }));
-      renderDiagnoses(data.blanks[0]);
     }
+    if (debug || qcm) renderDiagnoses(data.blanks[0]);
   }
 
   function loadTask(key) {
@@ -390,7 +403,10 @@
       el.level.textContent = "";
       el.level.appendChild(levelDots(data.level));
       el.level.appendChild(document.createTextNode(" " + data.level_name));
-      el.brief.textContent = data.brief + " — " + data.why;
+      // Le « pourquoi » n'existe pas partout : une question de QCM n'a que
+      // son énoncé, et un tiret orphelin se verrait.
+      el.brief.textContent = data.mode === "qcm" ? ""
+        : [data.brief, data.why].filter(Boolean).join(" — ");
       el.state.textContent = data.solved
         ? "✓ réussi" : "en cours · " + data.attempts + " tentative"
           + (data.attempts > 1 ? "s" : "");
@@ -427,8 +443,10 @@
     var body = current.mode === "predict"
       ? { answer: el.predictInput.value }
       : { selection: selection };
-    if (current.mode === "debug" && !selection.cause) {
-      el.feedback.textContent = "Choisissez une cause.";
+    var radio = current.mode === "debug" || current.mode === "qcm";
+    if (radio && !Object.keys(selection).length) {
+      el.feedback.textContent = current.mode === "qcm"
+        ? "Choisissez une réponse." : "Choisissez une cause.";
       el.feedback.className = "feedback ko";
       el.check.disabled = false;
       return;
@@ -443,13 +461,16 @@
           el.feedback.className = "feedback ko";
           return;
         }
-        if (current.mode === "debug") {
-          el.diagNote.textContent = res.note;
+        if (radio) {
+          // Un QCM ne commente pas les mauvaises réponses : le bandeau
+          // reste fermé tant que l'élève n'a pas trouvé.
+          el.diagNote.textContent = res.note || "";
           el.diagNote.className = res.ok ? "note ok-note" : "note ko-note";
-          el.diagNote.hidden = false;
+          el.diagNote.hidden = !res.note;
           if (res.ok) {
-            el.feedback.textContent = res.first_time
-              ? "Diagnostic exact." : "Diagnostic exact (déjà validé).";
+            el.feedback.textContent = current.mode === "qcm"
+              ? (res.first_time ? "Bonne réponse." : "Bonne réponse (déjà validée).")
+              : (res.first_time ? "Diagnostic exact." : "Diagnostic exact (déjà validé).");
             el.feedback.className = "feedback ok";
             el.state.textContent = "\u2713 réussi";
             el.state.className = "pill ok";
@@ -460,7 +481,8 @@
             renderNav();
           } else {
             current.attempts += 1;
-            el.feedback.textContent = "Ce n'est pas la cause."
+            el.feedback.textContent = (current.mode === "qcm"
+              ? "Ce n'est pas la bonne réponse." : "Ce n'est pas la cause.")
               + lossNote(before, res.stakes, wasSolved);
             el.feedback.className = "feedback ko";
           }
