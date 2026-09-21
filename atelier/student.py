@@ -56,13 +56,42 @@ def touch(student_id):
 def progress_of(student):
     rows = tasks_of(student["id"])
     solved = sum(1 for t in rows if t["solved"])
+    shares = scoring.shares_of(rows, ex.answer_space)
     return {
         "solved": solved,
         "total": len(rows),
         "penalty": student["penalty_points"],
         "exits": student["exit_count"],
-        "score": scoring.final_score(solved, len(rows), student["penalty_points"]),
+        # Points laisses sur les exercices reussis a l'arrache : l'eleve doit
+        # voir ce que ses essais manques lui ont deja coute.
+        "lost": round(scoring.base_score([1.0] * solved, len(rows))
+                      - scoring.base_score(shares, len(rows)), 2),
+        "score": scoring.final_score(shares, len(rows),
+                                     student["penalty_points"]),
     }
+
+
+def stakes_of(task, total):
+    """Ce que l'exercice rapporte encore, et ce que coute un essai manque.
+
+    Descend avec chaque exercice : un bareme qui sanctionne sans prevenir
+    serait un piege. L'eleve voit la mise avant de tenter, pas apres.
+    """
+    choices = ex.answer_space(task["pattern_key"])
+    value = scoring.exercise_value(total)
+    return {
+        "value": round(value, 2),
+        "cost": round(scoring.attempt_cost(total, choices), 2),
+        "tries": scoring.allowance(choices),
+        "wrong": task["wrong_attempts"],
+        "worth": round(value * scoring.kept_share(choices,
+                                                  task["wrong_attempts"]), 2),
+    }
+
+
+def task_count(student_id):
+    return query("SELECT COUNT(*) AS c FROM task WHERE student_id = ?",
+                 (student_id,), one=True)["c"]
 
 
 # --------------------------------------------------------------------------
@@ -191,19 +220,31 @@ def done_page():
         return redirect(url_for("student.join_form"))
     rows = tasks_of(student["id"])
     solved = sum(1 for t in rows if t["solved"])
+    shares = scoring.shares_of(rows, ex.answer_space)
     score = student["final_score"]
     if score is None:
-        score = scoring.final_score(solved, len(rows), student["penalty_points"])
+        score = scoring.final_score(shares, len(rows), student["penalty_points"])
     incidents = query(
         "SELECT * FROM incident WHERE student_id = ? ORDER BY ordinal",
         (student["id"],),
     )
+    value = scoring.exercise_value(len(rows))
     return render_template(
         "done.html", student=student, solved=solved, total=len(rows),
-        score=score, base=scoring.base_score(solved, len(rows)),
-        incidents=incidents,
-        details=[(ex.PATTERNS[t["pattern_key"]].name, t["solved"], t["attempts"])
-                 for t in rows],
+        score=score, base=scoring.base_score(shares, len(rows)),
+        # Note qu'aurait valu la meme copie sans aucun essai manque : c'est
+        # l'ecart, pas le total, qui fait comprendre le bareme.
+        clean=scoring.base_score([1.0] * solved, len(rows)),
+        value=value, incidents=incidents,
+        details=[{
+            "name": ex.PATTERNS[t["pattern_key"]].name,
+            "solved": t["solved"],
+            "attempts": t["attempts"],
+            "wrong": t["wrong_attempts"],
+            "points": round(value * scoring.kept_share(
+                ex.answer_space(t["pattern_key"]), t["wrong_attempts"]), 2)
+                      if t["solved"] else 0.0,
+        } for t in rows],
     )
 
 
@@ -235,6 +276,8 @@ def api_me():
             "module": ex.module_of(t["pattern_key"]).title,
             "solved": bool(t["solved"]),
             "attempts": t["attempts"],
+            "wrong": t["wrong_attempts"],
+            "stakes": stakes_of(t, len(rows)),
         } for t in rows],
     })
 
@@ -267,6 +310,7 @@ def api_task(key):
         "lesson": list(pattern.lesson),
         "solved": solved,
         "attempts": task["attempts"],
+        "stakes": stakes_of(task, task_count(student["id"])),
     }
 
     if pattern.mode == "predict":
@@ -367,8 +411,14 @@ def api_check(key):
     if ok and not already:
         execute("UPDATE task SET solved = 1, solved_at = ? WHERE id = ?",
                 (now(), task["id"]))
+    elif not ok and not already:
+        # Seuls les essais manques d'un exercice pas encore trouve coutent :
+        # revenir sur un exercice deja valide ne peut plus rien lui retirer.
+        execute("UPDATE task SET wrong_attempts = wrong_attempts + 1 "
+                "WHERE id = ?", (task["id"],))
     touch(student["id"])
     student = current_student()  # relit les compteurs a jour
+    task = query("SELECT * FROM task WHERE id = ?", (task["id"],), one=True)
 
     body = {
         "complete": True,
@@ -377,6 +427,7 @@ def api_check(key):
         "trace": trace,
         "infinite": infinite,
         "first_time": ok and not already,
+        "stakes": stakes_of(task, task_count(student["id"])),
         "progress": progress_of(student),
     }
 
@@ -469,8 +520,8 @@ def api_finish():
     student = require_student()
     if not student["finished_at"]:
         rows = tasks_of(student["id"])
-        solved = sum(1 for t in rows if t["solved"])
-        score = scoring.final_score(solved, len(rows), student["penalty_points"])
+        score = scoring.final_score(scoring.shares_of(rows, ex.answer_space),
+                                    len(rows), student["penalty_points"])
         execute(
             "UPDATE student SET finished_at = ?, final_score = ? WHERE id = ?",
             (now(), score, student["id"]),

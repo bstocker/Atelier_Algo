@@ -18,8 +18,10 @@
         — {{ motifs|length }} exercice{{ 's' if motifs|length > 1 }}
       </p>
       <p class="muted">
-        {% for m in motifs %}<span class="chip lvl{{ m.level }}"
-           title="Niveau : {{ levels[m.level] }}">{{ m.name }}</span>{% endfor %}
+        {% for m in motifs %}<button type="button" class="chip lvl{{ m.level }}"
+           data-detail="{{ m.key }}" aria-haspopup="dialog"
+           title="Niveau : {{ levels[m.level] }} — voir les attendus"
+           >{{ m.name }}</button>{% endfor %}
       </p>
     </div>
     <div class="session-actions">
@@ -74,14 +76,17 @@
       <tbody id="live-body"></tbody>
     </table>
   </div>
-  <p class="hint">Mise à jour automatique toutes les 3 secondes.</p>
+  <p class="hint">Mise à jour automatique toutes les 3 secondes.
+     Cliquez sur le titre d'un exercice pour en relire les attendus.</p>
 </div>
+{% include "_exercise_sheet.html" %}
 {% endblock %}
 {% block scripts %}
 <script>
   window.LIVE_URL = "{{ url_for('admin.api_live', session_id=room['id']) }}";
 </script>
 <script src="{{ url_for('static', filename='js/admin_live.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_preview.js') }}"></script>
 <script>
   // Copie du lien de session. document.execCommand sert de repli : l'API
   // presse-papiers exige un contexte securise, absent en http local.

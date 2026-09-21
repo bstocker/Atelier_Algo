@@ -313,6 +313,28 @@ def register(patterns):
         PATTERNS[pattern.key] = pattern
 
 
+# Un exercice de prediction n'a pas de reponses enumerables : l'eleve ecrit
+# un texte libre, il n'y a pas de menu a epuiser. Le bareme lui applique
+# l'allocation d'un menu a quatre options, la forme la plus courante du
+# catalogue, pour que l'acharnement y coute comme ailleurs.
+PREDICT_CHOICES = 4
+
+
+def answer_space(key):
+    """Nombre de reponses distinctes que l'exercice accepte.
+
+    Sert au bareme : un exercice a `answer_space - 1` reponses fausses, et
+    les avoir toutes essayees doit ramener sa valeur a zero.
+    """
+    pattern = PATTERNS[key]
+    if not pattern.blanks:
+        return PREDICT_CHOICES
+    space = 1
+    for _label, options in pattern.blanks.values():
+        space *= len(options)
+    return space
+
+
 def specs(pattern):
     """Tirages a effectuer pour cet exercice, sous forme homogene."""
     if pattern.dims:

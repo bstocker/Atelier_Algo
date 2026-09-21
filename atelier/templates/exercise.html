@@ -15,6 +15,9 @@
   <h1>Prêt à commencer&nbsp;?</h1>
   <p class="muted">L'épreuve s'ouvre en plein écran. Restez dans la fenêtre
      jusqu'à la remise de votre copie.</p>
+  <p class="hint">Les exercices valent tous le même nombre de points. Chaque
+     essai manqué en retire une part&nbsp;: les avoir tous essayés ramène
+     l'exercice à zéro. Lisez avant de valider.</p>
   <button type="button" class="primary" id="start-btn">Passer en plein écran et commencer</button>
   <p class="hint" id="gate-hint"></p>
 </div>
@@ -34,7 +37,12 @@
         </div>
         <p class="muted" id="task-brief"></p>
       </div>
-      <span class="pill" id="task-state"></span>
+      <div class="panel-pills">
+        <!-- La mise avant le geste : l'eleve voit ce que l'exercice vaut
+             encore, et ce qu'un essai manque lui coutera. -->
+        <span class="pill" id="task-stakes" hidden></span>
+        <span class="pill" id="task-state"></span>
+      </div>
     </header>
 
     <!-- Rappel de cours, seulement sur les exercices qui en portent un -->

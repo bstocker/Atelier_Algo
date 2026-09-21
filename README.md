@@ -115,7 +115,9 @@ Trois conséquences à connaître :
 ### Ouvrir votre première session
 
 1. Rendez-vous sur `/admin/login` et connectez-vous avec `ATELIER_ADMIN_USER` / `ATELIER_ADMIN_PASSWORD`.
-2. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par module puis par niveau**, avec un bouton pour cocher un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
+2. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par chapitre, module puis niveau**, avec un bouton pour cocher un chapitre, un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
+   Chapitres et modules **se replient** : le catalogue se parcourt sans dérouler cinquante-cinq intitulés, et chaque en-tête replié affiche le compte de ses exercices cochés. Les plis suivent l'enseignant d'une visite à l'autre.
+   Un clic sur le **titre d'un exercice** ouvre sa fiche : voir plus bas.
 3. Cliquez sur **Lancer la session**.
 4. Copiez le **lien à transmettre** et envoyez-le à vos étudiants. Le code y est déjà : ils n'ont que leur nom et leur prénom à saisir. Le code reste affiché à côté si vous préférez le dicter.
 5. Suivez leurs réponses en direct sur la même page.
@@ -186,7 +188,11 @@ Trois modes coexistent :
 | **Prédire** (2) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
 | **Trouver le bug** (4) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
 
+Dans les trois modes, un essai manqué entame la valeur du motif.
+
 **La taille de chaque motif est tirée au hasard par étudiant** : deux voisins n'ont pas la même cible. La correction est faite **côté serveur** — le navigateur ne reçoit jamais la réponse attendue.
+
+**Un essai manqué coûte des points sur le motif en cours** : essayer les réponses une par une jusqu'à tomber juste ramène le motif à zéro. Voir **Le coût d'un essai manqué**.
 
 ### Surveillance de la fenêtre
 
@@ -199,6 +205,8 @@ L'épreuve s'ouvre en plein écran. Une « sortie » est tout passage hors de l'
 | 3<sup>e</sup> et suivantes | &minus;3 points |
 
 Le décompte est un rappel à l'ordre : la pénalité dépend du rang de la sortie, pas du délai de retour. Ce délai est néanmoins enregistré et visible par l'enseignant.
+
+Ces pénalités-là frappent la copie entière. Une seconde sanction, indépendante, porte sur le seul motif en cours : voir **Le coût d'un essai manqué**.
 
 ⚠️ **Aucune boîte de dialogue native dans la page d'épreuve.** Un `window.confirm()` fait perdre le focus à la page : la surveillance le comptait comme une sortie, et l'élève était pénalisé pour avoir simplement cliqué sur « Remettre ma copie ». La confirmation de remise est donc une boîte dessinée dans la page. Un test refuse tout `confirm`, `alert` ou `prompt` dans `exercise.js`.
 
@@ -320,9 +328,54 @@ Chaque exercice porte son niveau, signalé **par des points autant que par la co
 
 L'élève les voit sur les boutons de navigation et à côté du titre de l'exercice courant ; l'enseignant, dans le formulaire de composition. Mêmes repères, mêmes teintes.
 
+### La fiche d'un exercice
+
+Cliquer sur le **titre d'un exercice**, n'importe où dans la console d'administration, ouvre sa fiche : l'énoncé, ce que l'exercice travaille, le rappel de cours affiché à l'élève, la **sortie attendue**, le code complété par la réponse de référence, et les menus avec la bonne option marquée d'une coche. En mode diagnostic, la fiche montre les deux sorties côte à côte, le nom du défaut et l'explication attachée à chaque cause.
+
+Trois points d'entrée mènent à la même fiche : le formulaire de composition, le récapitulatif d'une session, et les en-têtes de colonne du suivi direct.
+
+La fiche est **tirée sur une graine fixe** : deux lectures montrent le même énoncé, alors que chaque élève, lui, reçoit le sien. Le pied de la fiche le rappelle, pour qu'on ne prenne pas l'exemple pour la seule forme possible.
+
+Elle sert aussi de garde-fou : la réponse de référence et le nom du défaut y sont en clair. La route `/admin/api/patterns/<clé>` est donc derrière l'authentification enseignant, et un test vérifie qu'elle répond `401` sans session.
+
 ### Barème
 
-`note = 20 × (motifs réussis / motifs de la session) − pénalités`, bornée à l'intervalle [0, 20]. Les motifs pèsent tous le même poids ; le nombre de tentatives n'entre pas dans la note, mais il est affiché à l'enseignant.
+`note = somme des motifs réussis − pénalités de sortie`, bornée à l'intervalle [0, 20].
+
+Les motifs pèsent tous le même poids : dans une session de huit, chacun vaut 2,50 points. Mais un motif **ne rapporte sa valeur pleine que s'il est trouvé du premier coup**.
+
+### Le coût d'un essai manqué
+
+Sans cela, un élève pouvait essayer les réponses une par une jusqu'à tomber juste, et décrocher la note pleine sans rien comprendre. Un essai manqué retire donc une part de la valeur du motif — **et de ce motif-là seulement**, à la différence des sorties de fenêtre qui frappent la copie entière.
+
+La part retirée dépend du **nombre de réponses que le motif propose** :
+
+`part gardée = 1 − essais manqués / (réponses possibles − 1)`, plancher à zéro.
+
+Un motif à `r` réponses en a `r − 1` de fausses : les avoir toutes essayées ramène le motif à zéro. Chercher au hasard ne rapporte donc rien, et le prix d'un essai reste proportionné à la facilité de deviner.
+
+| Motif | Réponses | Un essai manqué coûte | Zéro après |
+| --- | --- | --- | --- |
+| Un menu de quatre options | 4 | ⅓ de sa valeur | 3 essais manqués |
+| Deux menus de quatre options | 16 | 1/15 de sa valeur | 15 essais manqués |
+| Diagnostic (quatre causes) | 4 | ⅓ de sa valeur | 3 essais manqués |
+| Prédiction (texte libre) | — | ⅓ de sa valeur | 3 essais manqués |
+
+La prédiction n'a pas de réponses énumérables : elle reçoit l'allocation d'un menu à quatre options (`PREDICT_CHOICES`, dans `engine.py`), pour que l'acharnement y coûte comme ailleurs.
+
+Trois garde-fous accompagnent la règle :
+
+- **L'élève est prévenu avant de jouer**, jamais après. L'écran d'accueil énonce la règle, et chaque motif porte une pastille qui dit ce qu'il vaut encore et ce qu'un essai manqué lui coûtera. Un barème qui sanctionne en silence serait un piège.
+- **Un menu incomplet n'est pas un essai** : la réponse est refusée avant d'être comptée.
+- **Un motif déjà validé ne peut plus rien perdre** : on peut y revenir pour comprendre, sans risque.
+
+Un motif jamais trouvé ne rapporte rien, quels qu'aient été les essais : la perte s'arrête à zéro et ne mord pas sur les autres motifs.
+
+Côté enseignant, les essais manqués remontent dans le suivi direct (une tuile, une colonne, et une pastille liserée sur les motifs arrachés), dans l'export CSV et dans le récapitulatif de l'élève.
+
+### Migrations de la base
+
+`init_db()` rejoue `schema.sql` à chaque démarrage, mais `CREATE TABLE IF NOT EXISTS` laisse intactes les tables déjà en place : une base déployée avant l'ajout d'une colonne ne l'aurait jamais. `db.ADDED_COLUMNS` liste les colonnes ajoutées après coup, et `_catch_up()` les pose au démarrage si elles manquent. C'est idempotent, et les copies d'avant ne sont pas sanctionnées rétroactivement : `wrong_attempts` y vaut zéro.
 
 ### Routes
 
@@ -335,6 +388,7 @@ L'élève les voit sur les boutons de navigation et à côté du titre de l'exer
 | `/admin/login` | public | Connexion enseignant |
 | `/admin/` | enseignant | Créer une session, lister celles en cours |
 | `/admin/sessions/<id>` | enseignant | Lancer, suivre en direct, terminer |
+| `/admin/api/patterns/<clé>` | enseignant | Les attendus d'un exercice, pour sa fiche |
 | `/admin/historique` | enseignant | Sessions closes, moyennes, export |
 | `/admin/sessions/<id>/export.csv` | enseignant | Notes au format CSV (séparateur `;`) |
 
@@ -353,7 +407,7 @@ atelier/
   modules/              Un fichier par module d'exercices
     boucles.py  conditions.py  chaines.py
     tableaux.py  recursif.py   arguments.py
-  scoring.py            Barème et table des pénalités
+  scoring.py            Barème : valeur d'un motif, essais manqués, pénalités
   student.py            Parcours étudiant et API
   admin.py              Espace enseignant, suivi direct, historique
   templates/            Gabarits Jinja
@@ -362,6 +416,8 @@ atelier/
     img/                Logo Evalio (clair et sombre), favicon
     js/proctor.js       Surveillance de la fenêtre
     js/exercise.js      Page d'exercice
+    js/admin_compose.js Composition d'une session : plis et sélections
+    js/admin_preview.js Fiche d'un exercice, côté enseignant
     js/admin_live.js    Suivi direct (interrogation toutes les 3 s)
 test_atelier.py         Tests de bout en bout
 .env                    Genere par le deploiement, jamais versionne

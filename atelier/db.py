@@ -30,6 +30,24 @@ def close_db(_exc=None):
         db.close()
 
 
+# Colonnes ajoutees apres la premiere mise en service. `CREATE TABLE IF NOT
+# EXISTS` laisse intactes les tables deja presentes : sans ce rattrapage,
+# une base deployee avant l'ajout n'aurait jamais la colonne.
+ADDED_COLUMNS = (
+    ("task", "wrong_attempts", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _catch_up(conn):
+    """Ajoute les colonnes manquantes d'une base deja en place. Idempotent."""
+    for table, column, declaration in ADDED_COLUMNS:
+        present = {row[1] for row in
+                   conn.execute("PRAGMA table_info(%s)" % table)}
+        if column not in present:
+            conn.execute("ALTER TABLE %s ADD COLUMN %s %s"
+                         % (table, column, declaration))
+
+
 def init_db(app):
     """Cree le schema si besoin. Idempotent : sur a chaque demarrage."""
     os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
@@ -38,6 +56,7 @@ def init_db(app):
     try:
         with open(schema, encoding="utf-8") as fh:
             conn.executescript(fh.read())
+        _catch_up(conn)
         conn.commit()
     finally:
         conn.close()

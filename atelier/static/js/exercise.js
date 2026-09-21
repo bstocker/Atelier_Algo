@@ -15,6 +15,7 @@
     level: document.getElementById("task-level"),
     brief: document.getElementById("task-brief"),
     state: document.getElementById("task-state"),
+    stakes: document.getElementById("task-stakes"),
     target: document.getElementById("target"),
     output: document.getElementById("output"),
     code: document.getElementById("code"),
@@ -76,6 +77,12 @@
 
   // --- Affichage ----------------------------------------------------------
 
+  // Les points s'ecrivent a la francaise, virgule comprise : ce sont des
+  // notes, l'eleve doit les relire sans traduire.
+  function points(value) {
+    return value.toFixed(2).replace(".", ",") + " pt" + (value >= 2 ? "s" : "");
+  }
+
   function showProgress(p) {
     progress = p;
     el.progressPill.textContent = p.solved + " / " + p.total + " motifs";
@@ -86,7 +93,44 @@
         + (p.exits > 1 ? "s" : "");
     }
     el.finishHint.textContent = "Note actuelle : " + p.score.toFixed(2)
-      + " / 20. La remise est définitive.";
+      + " / 20"
+      + (p.lost > 0 ? " · " + points(p.lost) + " laissés en essais manqués"
+                    : "")
+      + ". La remise est définitive.";
+  }
+
+  // Cout reel de l'essai qui vient d'etre fait : l'ecart entre ce que
+  // l'exercice valait et ce qu'il vaut. Un motif deja valide ne perd rien,
+  // et un motif deja tombe a zero ne peut plus tomber plus bas.
+  function lossNote(before, after, wasSolved) {
+    if (wasSolved) return " Ce motif est déjà validé : rien ne vous est retiré.";
+    var lost = before ? Math.max(0, before.worth - after.worth) : after.cost;
+    return lost > 0
+      ? " Cet essai manqué coûte " + points(lost) + "."
+      : " Ce motif ne rapporte plus de points.";
+  }
+
+  function showStakes(stakes, solved) {
+    if (!stakes) { el.stakes.hidden = true; return; }
+    el.stakes.hidden = false;
+    if (solved) {
+      el.stakes.className = "pill ok";
+      el.stakes.textContent = "acquis : " + points(stakes.worth)
+        + " sur " + points(stakes.value);
+    } else if (stakes.worth <= 0) {
+      el.stakes.className = "pill warn";
+      el.stakes.textContent = "ne rapporte plus de points";
+    } else if (stakes.wrong > 0) {
+      el.stakes.className = "pill warn";
+      el.stakes.textContent = "vaut encore " + points(stakes.worth)
+        + " sur " + points(stakes.value);
+    } else {
+      el.stakes.className = "pill";
+      el.stakes.textContent = "vaut " + points(stakes.value);
+    }
+    el.stakes.title = "Chaque essai manqué coûte " + points(stakes.cost)
+      + " ; " + stakes.tries + " essais manqués ramènent cet exercice à zéro."
+      + (stakes.wrong ? " Essais manqués : " + stakes.wrong + "." : "");
   }
 
   function levelDots(level) {
@@ -351,6 +395,7 @@
         ? "✓ réussi" : "en cours · " + data.attempts + " tentative"
           + (data.attempts > 1 ? "s" : "");
       el.state.className = data.solved ? "pill ok" : "pill";
+      showStakes(data.stakes, data.solved);
       el.feedback.textContent = "";
       el.feedback.className = "feedback";
 
@@ -390,6 +435,8 @@
     }
     postJSON("/api/task/" + encodeURIComponent(current.key) + "/check", body)
       .then(function (res) {
+        var before = current.stakes;
+        var wasSolved = !!current.solved;
         if (!res.complete) {
           renderTrace(null);
           el.feedback.textContent = res.message;
@@ -406,15 +453,19 @@
             el.feedback.className = "feedback ok";
             el.state.textContent = "\u2713 réussi";
             el.state.className = "pill ok";
+            current.solved = true;
             tasks.forEach(function (t) {
               if (t.key === current.key) t.solved = true;
             });
             renderNav();
           } else {
             current.attempts += 1;
-            el.feedback.textContent = "Ce n'est pas la cause.";
+            el.feedback.textContent = "Ce n'est pas la cause."
+              + lossNote(before, res.stakes, wasSolved);
             el.feedback.className = "feedback ko";
           }
+          current.stakes = res.stakes;
+          showStakes(res.stakes, res.ok || wasSolved);
           showProgress(res.progress);
           return;
         }
@@ -424,8 +475,11 @@
             + "aucune sortie à comparer.";
           renderTrace(res.trace);
           el.feedback.textContent = "Boucle infinie. Regardez le tableau : "
-            + "le test reste vrai tour après tour.";
+            + "le test reste vrai tour après tour."
+            + lossNote(before, res.stakes, wasSolved);
           el.feedback.className = "feedback ko";
+          current.stakes = res.stakes;
+          showStakes(res.stakes, false);
           showProgress(res.progress);
           return;
         }
@@ -446,6 +500,7 @@
           el.state.textContent = "✓ réussi";
           el.state.className = "pill ok";
           if (current.mode === "predict") el.predictInput.readOnly = true;
+          current.solved = true;
           tasks.forEach(function (t) { if (t.key === current.key) t.solved = true; });
           renderNav();
         } else {
@@ -458,9 +513,12 @@
           if (res.count_mismatch) {
             message += " Le nombre de lignes ne correspond pas non plus.";
           }
+          message += lossNote(before, res.stakes, wasSolved);
           el.feedback.textContent = message;
           el.feedback.className = "feedback ko";
         }
+        current.stakes = res.stakes;
+        showStakes(res.stakes, res.ok || wasSolved);
         showProgress(res.progress);
       })
       .catch(function () {

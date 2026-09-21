@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS task (
     position    INTEGER NOT NULL,
     params      TEXT    NOT NULL,              -- JSON : {"n": 5}
     attempts    INTEGER NOT NULL DEFAULT 0,
+    wrong_attempts INTEGER NOT NULL DEFAULT 0,  -- essais manques avant reussite
     solved      INTEGER NOT NULL DEFAULT 0,
     solved_at   TEXT,
     selection   TEXT    NOT NULL DEFAULT '{}', -- JSON : dernier choix

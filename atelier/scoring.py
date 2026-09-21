@@ -1,4 +1,18 @@
-"""Bareme de la session : note sur 20, moins les penalites de sortie."""
+"""Bareme de la session : note sur 20, moins les penalites.
+
+Deux penalites se cumulent, et elles ne repondent pas a la meme crainte.
+
+Les **sorties de fenetre** retirent des points a la copie entiere : elles
+sanctionnent le fait d'aller chercher la reponse ailleurs.
+
+Les **essais manques** retirent des points au seul exercice en cours, au
+prorata de sa valeur. Sans eux, un eleve pourrait essayer les reponses une
+par une jusqu'a tomber juste et decrocher la note pleine ; avec eux, les
+avoir toutes essayees ramene l'exercice a zero.
+
+Ce module ne connait pas le catalogue : le nombre de reponses possibles
+d'un exercice lui est passe en argument.
+"""
 
 MAX_SCORE = 20.0
 
@@ -16,14 +30,69 @@ def penalty_for(ordinal):
     return PENALTY_BY_ORDINAL.get(ordinal, PENALTY_BEYOND)
 
 
-def base_score(solved, total):
-    """Note brute sur 20, proportionnelle aux motifs reussis."""
+# --------------------------------------------------------------------------
+# Valeur d'un exercice et cout des essais manques
+# --------------------------------------------------------------------------
+
+def exercise_value(total):
+    """Points que vaut un exercice dans une session qui en compte `total`."""
     if total <= 0:
         return 0.0
-    return round(MAX_SCORE * solved / total, 2)
+    return MAX_SCORE / total
 
 
-def final_score(solved, total, penalty_points):
+def allowance(choices):
+    """Nombre d'essais manques qui ramenent un exercice a zero.
+
+    Un exercice a `choices` reponses possibles, donc `choices - 1` fausses :
+    c'est le nombre d'essais qu'il faut pour les avoir toutes tentees.
+    """
+    return max(1, int(choices) - 1)
+
+
+def kept_share(choices, wrong_attempts):
+    """Part de la valeur d'un exercice qui subsiste apres des essais manques.
+
+    La decroissance est lineaire et s'arrete a zero : un essai manque coute
+    toujours la meme fraction, et les avoir tous faits ne rapporte plus rien.
+    Un exercice a quatre reponses perd donc un tiers de sa valeur par essai
+    manque ; un exercice a seize reponses, un quinzieme.
+    """
+    return max(0.0, 1.0 - float(wrong_attempts) / allowance(choices))
+
+
+def attempt_cost(total, choices):
+    """Points qu'un essai manque retire a un exercice."""
+    return exercise_value(total) / allowance(choices)
+
+
+def shares_of(tasks, choices_of):
+    """Parts gardees sur les exercices reussis, dans l'ordre des taches.
+
+    `choices_of` rend le nombre de reponses possibles d'un exercice : le
+    bareme reste ainsi ignorant du catalogue. Les exercices non reussis
+    ne rapportent rien et n'apparaissent pas ici.
+    """
+    return [kept_share(choices_of(task["pattern_key"]), task["wrong_attempts"])
+            for task in tasks if task["solved"]]
+
+
+# --------------------------------------------------------------------------
+# Note
+# --------------------------------------------------------------------------
+
+def base_score(shares, total):
+    """Note brute sur 20 : somme des parts gardees, rapportee au total.
+
+    Un exercice reussi du premier coup rapporte une part entiere ; un
+    exercice arrache apres des essais manques, une part entamee.
+    """
+    if total <= 0:
+        return 0.0
+    return round(MAX_SCORE * sum(shares) / total, 2)
+
+
+def final_score(shares, total, penalty_points):
     """Note finale, bornee a l'intervalle [0, 20]."""
-    score = base_score(solved, total) - float(penalty_points)
+    score = base_score(shares, total) - float(penalty_points)
     return round(min(MAX_SCORE, max(0.0, score)), 2)

@@ -87,6 +87,47 @@ def dashboard():
                            catalogue=ex.catalogue(), levels=ex.LEVELS)
 
 
+@bp.get("/api/patterns/<key>")
+@require_admin
+def api_pattern(key):
+    """Les attendus d'un exercice, pour la fiche de l'enseignant.
+
+    Le tirage est fait sur une graine fixe : deux lectures de la meme
+    fiche montrent le meme enonce, alors que chaque eleve, lui, recevra
+    le sien. Rien n'est cache ici — la reponse de reference et la note
+    d'enseignant en font partie, la route est derriere l'authentification.
+    """
+    if key not in ex.PATTERNS:
+        abort(404, description="Exercice inconnu.")
+    pattern = ex.PATTERNS[key]
+    params = ex.draw_params(key, random.Random(key))
+    return jsonify({
+        "key": key,
+        "name": pattern.name,
+        "brief": pattern.brief,
+        "why": pattern.why,
+        "mode": pattern.mode,
+        "level": pattern.level,
+        "level_name": ex.LEVELS[pattern.level],
+        "module": ex.module_of(key).title,
+        "chapter": ex.chapter_of(key).title,
+        "lesson": list(pattern.lesson),
+        "teacher_note": pattern.teacher_note,
+        "code": ex.render_code(key, params, dict(pattern.ref)),
+        "target": ex.target_rows(key, params),
+        "actual": ex.broken_rows(key, params),
+        "blanks": [
+            {"id": blank_id,
+             "label": label,
+             "options": [{"c": o.c,
+                          "note": o.note,
+                          "ok": o.id == pattern.ref.get(blank_id)}
+                         for o in options]}
+            for blank_id, (label, options) in pattern.blanks.items()
+        ],
+    })
+
+
 @bp.post("/sessions")
 @require_admin
 def create_session():
@@ -131,11 +172,10 @@ def close_session(session_id):
     stamp = now()
     for student in query("SELECT * FROM student WHERE session_id = ?",
                          (session_id,)):
-        solved = query(
-            "SELECT COUNT(*) AS c FROM task WHERE student_id = ? AND solved = 1",
-            (student["id"],), one=True,
-        )["c"]
-        score = scoring.final_score(solved, total, student["penalty_points"])
+        tasks = query("SELECT * FROM task WHERE student_id = ?",
+                      (student["id"],))
+        shares = scoring.shares_of(tasks, ex.answer_space)
+        score = scoring.final_score(shares, total, student["penalty_points"])
         db.execute(
             """UPDATE student
                   SET final_score = ?, finished_at = COALESCE(finished_at, ?)
@@ -196,8 +236,10 @@ def _live_payload(session_id):
     rows = []
     for student in students:
         tasks = by_student[student["id"]]
+        ordered = [tasks[k] for k in keys if k in tasks]
         solved = sum(1 for t in tasks.values() if t["solved"])
-        live = scoring.final_score(solved, total, student["penalty_points"])
+        shares = scoring.shares_of(ordered, ex.answer_space)
+        live = scoring.final_score(shares, total, student["penalty_points"])
         rows.append({
             "id": student["id"],
             "name": "%s %s" % (student["last_name"].upper(),
@@ -205,6 +247,10 @@ def _live_payload(session_id):
             "solved": solved,
             "total": total,
             "attempts": sum(t["attempts"] for t in tasks.values()),
+            "wrong": sum(t["wrong_attempts"] for t in tasks.values()),
+            # Ce que les essais manques ont deja coute a la copie.
+            "lost": round(scoring.base_score([1.0] * solved, total)
+                          - scoring.base_score(shares, total), 2),
             "exits": student["exit_count"],
             "penalty": student["penalty_points"],
             "score": student["final_score"] if student["final_score"] is not None
@@ -214,7 +260,8 @@ def _live_payload(session_id):
             "cells": [
                 {"key": k,
                  "solved": bool(tasks[k]["solved"]) if k in tasks else False,
-                 "attempts": tasks[k]["attempts"] if k in tasks else 0}
+                 "attempts": tasks[k]["attempts"] if k in tasks else 0,
+                 "wrong": tasks[k]["wrong_attempts"] if k in tasks else 0}
                 for k in keys
             ],
         })
@@ -231,6 +278,7 @@ def _live_payload(session_id):
             "finished": sum(1 for r in rows if r["finished"]),
             "average": round(sum(scores) / len(scores), 2) if scores else None,
             "exits": sum(r["exits"] for r in rows),
+            "wrong": sum(r["wrong"] for r in rows),
         },
         "server_time": now(),
     }
@@ -249,10 +297,13 @@ def export_csv(session_id):
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
     writer.writerow(["Nom", "Motifs reussis", "Total motifs", "Tentatives",
-                     "Sorties", "Penalite", "Note sur 20", "Termine"])
+                     "Essais manques", "Points perdus", "Sorties", "Penalite",
+                     "Note sur 20", "Termine"])
     for row in data["students"]:
         writer.writerow([row["name"], row["solved"], row["total"],
-                         row["attempts"], row["exits"], row["penalty"],
+                         row["attempts"], row["wrong"],
+                         ("%.2f" % row["lost"]).replace(".", ","),
+                         row["exits"], row["penalty"],
                          ("%.2f" % row["score"]).replace(".", ","),
                          "oui" if row["finished"] else "non"])
     return Response(

@@ -27,62 +27,73 @@
       </p>
 
       {% for chapter, modules in catalogue %}
-      <section class="chapter" data-chapter="{{ chapter.key }}">
-        <header class="chapter-head">
-          <div>
-            <h2 class="chapter-title">{{ chapter.title }}</h2>
-            <p class="hint">{{ chapter.summary }}</p>
-          </div>
-          <button type="button" class="ghost" data-pick="chapter">Cocher ce chapitre</button>
-        </header>
+      <details class="chapter" data-chapter="{{ chapter.key }}" open>
+        <summary class="chapter-head">
+          <h2 class="chapter-title">{{ chapter.title }}</h2>
+          <span class="hint">{{ chapter.summary }}</span>
+          <span class="head-tools">
+            <span class="pick-count" data-count></span>
+            <button type="button" class="ghost" data-pick="chapter">Cocher ce chapitre</button>
+          </span>
+        </summary>
 
-      {% for module, niveaux in modules %}
-      <section class="module" data-module="{{ module.key }}">
-        <header class="module-head">
-          <div>
-            <h2 class="module-title">
+        {% for module, niveaux in modules %}
+        <details class="module" data-module="{{ module.key }}">
+          <summary class="module-head">
+            <h3 class="module-title">
               {{ module.title }}
               <span class="level-badge lvl{{ module.level }}"
                     title="Niveau du module : {{ levels[module.level] }}">
                 <span class="level-dots" aria-hidden="true">{{ '●' * module.level }}{{ '○' * (4 - module.level) }}</span>
                 {{ levels[module.level] }}
               </span>
-            </h2>
-            <p class="hint">{{ module.summary }}</p>
-          </div>
-          <button type="button" class="ghost" data-pick="module">Cocher ce module</button>
-        </header>
-
-        {% for level, label, motifs in niveaux %}
-        <div class="level-group" data-level="{{ level }}">
-          <div class="level-head">
-            <span class="level-badge lvl{{ level }}">
-              <span class="level-dots" aria-hidden="true">{{ '●' * level }}{{ '○' * (4 - level) }}</span>
-              {{ label }}
+            </h3>
+            <span class="hint">{{ module.summary }}</span>
+            <span class="head-tools">
+              <span class="pick-count" data-count></span>
+              <button type="button" class="ghost" data-pick="module">Cocher ce module</button>
             </span>
-            <button type="button" class="ghost" data-pick="level">Cocher ce niveau</button>
-          </div>
-          <div class="checks">
-            {% for p in motifs %}
-            <label class="check">
-              <input type="checkbox" name="patterns" value="{{ p.key }}"
-                     {% if p.level <= 2 %}checked{% endif %}>
-              <span>
-                <strong>{{ p.name }}</strong>
-                {% if p.mode == 'predict' %}<span class="tag">prédire</span>{% endif %}
-                {% if p.mode == 'debug' %}<span class="tag">diagnostic</span>{% endif %}
-                {% if p.trace %}<span class="tag">pas à pas</span>{% endif %}
-                <em>{{ p.brief }}</em>
-                {% if p.teacher_note %}<em class="teacher-note">{{ p.teacher_note }}</em>{% endif %}
+          </summary>
+
+          {% for level, label, motifs in niveaux %}
+          <div class="level-group" data-level="{{ level }}">
+            <div class="level-head">
+              <span class="level-badge lvl{{ level }}">
+                <span class="level-dots" aria-hidden="true">{{ '●' * level }}{{ '○' * (4 - level) }}</span>
+                {{ label }}
               </span>
-            </label>
-            {% endfor %}
+              <button type="button" class="ghost" data-pick="level">Cocher ce niveau</button>
+            </div>
+            <div class="checks">
+              {% for p in motifs %}
+              <div class="check">
+                <!-- Le titre est un bouton, donc hors du <label> : la case
+                     reprend son nom et son intitule par aria-labelledby. -->
+                <input type="checkbox" id="pick-{{ p.key }}" name="patterns" value="{{ p.key }}"
+                       aria-labelledby="nom-{{ p.key }} brief-{{ p.key }}"
+                       {% if p.level <= 2 %}checked{% endif %}>
+                <span class="check-body">
+                  <span class="check-title">
+                    <button type="button" class="exo-title" id="nom-{{ p.key }}"
+                            data-detail="{{ p.key }}" aria-haspopup="dialog"
+                            title="Voir les attendus de l'exercice">{{ p.name }}</button>
+                    {% if p.mode == 'predict' %}<span class="tag">prédire</span>{% endif %}
+                    {% if p.mode == 'debug' %}<span class="tag">diagnostic</span>{% endif %}
+                    {% if p.trace %}<span class="tag">pas à pas</span>{% endif %}
+                  </span>
+                  <label class="check-brief" id="brief-{{ p.key }}" for="pick-{{ p.key }}">
+                    <em>{{ p.brief }}</em>
+                    {% if p.teacher_note %}<em class="teacher-note">{{ p.teacher_note }}</em>{% endif %}
+                  </label>
+                </span>
+              </div>
+              {% endfor %}
+            </div>
           </div>
-        </div>
+          {% endfor %}
+        </details>
         {% endfor %}
-      </section>
-      {% endfor %}
-      </section>
+      </details>
       {% endfor %}
     </fieldset>
     <button type="submit" class="primary">Créer la session</button>
@@ -110,8 +121,10 @@
   <p class="muted">Aucune session en cours.</p>
   {% endif %}
 </div>
+{% include "_exercise_sheet.html" %}
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/admin_compose.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_preview.js') }}"></script>
 {% endblock %}

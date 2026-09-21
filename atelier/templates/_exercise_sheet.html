@@ -1,0 +1,19 @@
+{# Fiche d'un exercice, cote enseignant : remplie par admin_preview.js.
+   Une seule fiche par page, reutilisee a chaque titre clique. #}
+<dialog class="sheet" id="exo-sheet" aria-labelledby="sheet-name">
+  <header class="sheet-head">
+    <div>
+      <span class="eyebrow" id="sheet-path"></span>
+      <div class="title-row">
+        <h2 id="sheet-name">—</h2>
+        <span class="level-badge" id="sheet-level"></span>
+      </div>
+      <p class="muted" id="sheet-brief"></p>
+    </div>
+    <button type="button" class="ghost" id="sheet-close"
+            aria-label="Fermer la fiche">✕</button>
+  </header>
+  <div class="sheet-body" id="sheet-body"></div>
+  <p class="hint sheet-foot">Un exemple de tirage : chaque étudiant reçoit
+     le sien, avec d'autres valeurs.</p>
+</dialog>

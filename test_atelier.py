@@ -9,7 +9,7 @@ import unittest
 
 from markupsafe import escape
 
-from atelier import create_app, load_env_file, exercises as ex, scoring
+from atelier import create_app, db, load_env_file, exercises as ex, scoring
 
 
 def tirages(pattern):
@@ -174,6 +174,122 @@ class AtelierTest(unittest.TestCase):
         client.post("/api/incident", json={"kind": "blur"})   # -2
         progress = client.post("/api/heartbeat").get_json()
         self.assertEqual(progress["score"], 8.0)
+
+    def test_a_failed_attempt_costs_points_on_that_exercise(self):
+        """Un motif trouvé après un essai manqué rapporte moins qu'un sans faute."""
+        _, code = self.make_session(patterns=("carre", "triangle_rect"))
+        client, _ = self.join(code)
+
+        client.post("/api/task/carre/check", json={"selection": {"stars": "c"}})
+        task = client.get("/api/task/carre").get_json()
+        self.assertEqual(task["stakes"]["wrong"], 1)
+        # Quatre réponses, donc trois fausses : un tiers de 10 points.
+        self.assertEqual(task["stakes"]["value"], 10.0)
+        self.assertEqual(task["stakes"]["cost"], 3.33)
+        self.assertEqual(task["stakes"]["worth"], 6.67)
+
+        res = self.solve(client, "carre")
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["progress"]["score"], 6.67)
+        self.assertEqual(res["progress"]["lost"], 3.33)
+
+    def test_trying_every_answer_earns_nothing(self):
+        """L'élève qui essaie les réponses une par une finit à zéro."""
+        _, code = self.make_session(patterns=("carre",))
+        client, _ = self.join(code)
+        bonne = ex.PATTERNS["carre"].ref["stars"]
+        fausses = [o.id for o in ex.PATTERNS["carre"].blanks["stars"][1]
+                   if o.id != bonne]
+        for option in fausses:
+            client.post("/api/task/carre/check",
+                        json={"selection": {"stars": option}})
+        res = self.solve(client, "carre")
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["stakes"]["worth"], 0.0)
+        self.assertEqual(res["progress"]["solved"], 1)
+        self.assertEqual(res["progress"]["score"], 0.0)
+
+    def test_an_exercise_already_solved_costs_nothing_more(self):
+        """Revenir sur un motif validé ne peut plus lui retirer de points."""
+        _, code = self.make_session(patterns=("carre",))
+        client, _ = self.join(code)
+        self.solve(client, "carre")
+        res = client.post("/api/task/carre/check",
+                          json={"selection": {"stars": "c"}}).get_json()
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["stakes"]["wrong"], 0)
+        self.assertEqual(res["progress"]["score"], 20.0)
+
+    def test_an_incomplete_answer_costs_nothing(self):
+        """Un menu laissé vide n'est pas un essai : rien n'est retiré."""
+        _, code = self.make_session(patterns=("triangle_droite",))
+        client, _ = self.join(code)
+        client.post("/api/task/triangle_droite/check",
+                    json={"selection": {"spaces": "a"}})
+        self.assertEqual(client.get("/api/task/triangle_droite")
+                         .get_json()["stakes"]["wrong"], 0)
+
+    def test_the_cost_of_an_attempt_follows_the_answer_space(self):
+        """Deux menus de quatre options : seize réponses, un essai coûte moins."""
+        _, code = self.make_session(patterns=("carre", "triangle_droite"))
+        client, _ = self.join(code)
+        un_menu = client.get("/api/task/carre").get_json()["stakes"]
+        deux_menus = client.get("/api/task/triangle_droite").get_json()["stakes"]
+        self.assertEqual(un_menu["value"], deux_menus["value"])
+        self.assertEqual(un_menu["tries"], 3)
+        self.assertEqual(deux_menus["tries"], 15)
+        self.assertGreater(un_menu["cost"], deux_menus["cost"])
+
+    def test_the_student_sees_the_stakes_before_answering(self):
+        """La mise est annoncée avant le geste, jamais découverte après."""
+        _, code = self.make_session(patterns=("carre", "triangle_rect"))
+        client, _ = self.join(code)
+        stakes = client.get("/api/task/carre").get_json()["stakes"]
+        self.assertEqual(stakes["wrong"], 0)
+        self.assertEqual(stakes["worth"], stakes["value"])
+        page = client.get("/exercice").get_data(as_text=True)
+        self.assertIn("essai manqué", page)
+
+    def test_failed_attempts_reach_the_teacher(self):
+        session_id, code = self.make_session(patterns=("carre", "triangle_rect"))
+        client, _ = self.join(code)
+        client.post("/api/task/carre/check", json={"selection": {"stars": "c"}})
+        self.solve(client, "carre")
+
+        live = self.admin.get("/admin/api/sessions/%d/live" % session_id) \
+                         .get_json()
+        row = live["students"][0]
+        self.assertEqual(row["wrong"], 1)
+        self.assertEqual(row["lost"], 3.33)
+        self.assertEqual(row["score"], 6.67)
+        self.assertEqual(live["stats"]["wrong"], 1)
+        self.assertEqual([c["wrong"] for c in row["cells"]], [1, 0])
+
+        csv_text = self.admin.get("/admin/sessions/%d/export.csv" % session_id) \
+                             .get_data(as_text=True)
+        self.assertIn("Essais manques", csv_text)
+        self.assertIn("6,67", csv_text)
+
+    def test_closing_a_session_freezes_the_reduced_score(self):
+        session_id, code = self.make_session(patterns=("carre", "triangle_rect"))
+        client, _ = self.join(code)
+        client.post("/api/task/carre/check", json={"selection": {"stars": "c"}})
+        self.solve(client, "carre")
+        self.solve(client, "triangle_rect")
+        self.admin.post("/admin/sessions/%d/close" % session_id)
+        live = self.admin.get("/admin/api/sessions/%d/live" % session_id) \
+                         .get_json()
+        self.assertEqual(live["students"][0]["score"], 16.67)
+
+    def test_the_report_details_what_each_exercise_earned(self):
+        _, code = self.make_session(patterns=("carre", "triangle_rect"))
+        client, _ = self.join(code)
+        client.post("/api/task/carre/check", json={"selection": {"stars": "c"}})
+        self.solve(client, "carre")
+        client.post("/api/finish")
+        page = client.get("/termine").get_data(as_text=True)
+        self.assertIn("Essais manqués", page)
+        self.assertIn("6.67", page)      # points gardés sur le motif arraché
 
     def test_score_never_goes_below_zero(self):
         _, code = self.make_session(patterns=("carre",))
@@ -397,6 +513,67 @@ class AtelierTest(unittest.TestCase):
             self.assertIn(label, html)
         self.assertIn('data-level="1"', html)
 
+    def test_the_catalogue_folds_by_chapter_and_module(self):
+        """Le catalogue se parcourt plié : chapitre ouvert, modules repliés."""
+        html = self.admin.get("/admin/").get_data(as_text=True)
+        for chapter in ex.CHAPTERS:
+            self.assertIn('<details class="chapter" data-chapter="%s" open>'
+                          % chapter.key, html)
+        for module in ex.MODULES:
+            self.assertIn('<details class="module" data-module="%s">'
+                          % module.key, html)
+
+    def test_every_exercise_title_opens_its_sheet(self):
+        html = self.admin.get("/admin/").get_data(as_text=True)
+        self.assertIn('id="exo-sheet"', html)
+        for key in ex.ALL_KEYS:
+            with self.subTest(exercice=key):
+                self.assertIn('data-detail="%s"' % key, html)
+
+    def test_the_session_page_links_its_exercises_to_their_sheet(self):
+        session_id, _ = self.make_session(patterns=("ligne", "bug_borne"))
+        html = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        self.assertIn('id="exo-sheet"', html)
+        for key in ("ligne", "bug_borne"):
+            self.assertIn('data-detail="%s"' % key, html)
+
+    def test_the_sheet_states_what_is_expected(self):
+        """La fiche porte l'énoncé, la sortie attendue et la référence."""
+        for key in ex.ALL_KEYS:
+            with self.subTest(exercice=key):
+                data = self.admin.get("/admin/api/patterns/" + key).get_json()
+                pattern = ex.PATTERNS[key]
+                self.assertEqual(data["name"], pattern.name)
+                self.assertEqual(data["module"], ex.module_of(key).title)
+                self.assertEqual(data["chapter"], ex.chapter_of(key).title)
+                self.assertTrue(data["target"])
+                # Le code descend complet : aucun @trou@ ne subsiste.
+                self.assertNotIn("@", data["code"])
+                for blank in data["blanks"]:
+                    bonnes = [o for o in blank["options"] if o["ok"]]
+                    self.assertEqual(len(bonnes), 1, blank["id"])
+
+    def test_the_sheet_of_a_debug_exercise_shows_both_outputs(self):
+        data = self.admin.get("/admin/api/patterns/bug_borne").get_json()
+        self.assertNotEqual(data["target"], data["actual"])
+        self.assertTrue(data["teacher_note"].startswith("Défaut"))
+
+    def test_the_sheet_draws_the_same_example_twice(self):
+        """Relire une fiche doit montrer le même énoncé, pas un autre tirage."""
+        for key in ("ligne", "str_longueur"):
+            with self.subTest(exercice=key):
+                first = self.admin.get("/admin/api/patterns/" + key).get_json()
+                again = self.admin.get("/admin/api/patterns/" + key).get_json()
+                self.assertEqual(first, again)
+
+    def test_the_sheet_is_reserved_to_the_teacher(self):
+        self.assertEqual(
+            self.app.test_client().get("/admin/api/patterns/ligne").status_code,
+            401)
+        self.assertEqual(
+            self.admin.get("/admin/api/patterns/inconnu").status_code, 404)
+
     def test_student_sees_the_module_of_each_exercise(self):
         _, code = self.make_session(patterns=("ligne", "losange"))
         client, _ = self.join(code)
@@ -538,6 +715,77 @@ class AtelierTest(unittest.TestCase):
                                      json={"selection": {}}).status_code, 404)
 
 
+class MigrationTest(unittest.TestCase):
+    """Une base deja deployee doit survivre a l'ajout d'une colonne."""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(self.path)
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    def _old_database(self):
+        """Le schéma courant, privé de la colonne ajoutée après coup."""
+        import sqlite3
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "atelier", "schema.sql"),
+                  encoding="utf-8") as fh:
+            schema = fh.read()
+        for table, column, _decl in db.ADDED_COLUMNS:
+            schema = "\n".join(line for line in schema.splitlines()
+                               if not line.strip().startswith(column))
+        conn = sqlite3.connect(self.path)
+        conn.executescript(schema)
+        conn.execute("""INSERT INTO session (code, title, patterns, created_at)
+                        VALUES ('ABC123', 'ancienne', '["carre"]', '2026-01-01')""")
+        conn.execute("""INSERT INTO student (session_id, first_name, last_name,
+                                             token, joined_at)
+                        VALUES (1, 'Ada', 'Lovelace', 'jeton', '2026-01-01')""")
+        conn.execute("""INSERT INTO task (student_id, pattern_key, position,
+                                          params, attempts, solved)
+                        VALUES (1, 'carre', 0, '{"n": 4}', 5, 1)""")
+        conn.commit()
+        conn.close()
+
+    def _columns(self):
+        import sqlite3
+        conn = sqlite3.connect(self.path)
+        try:
+            return [row[1] for row in conn.execute("PRAGMA table_info(task)")]
+        finally:
+            conn.close()
+
+    def test_a_missing_column_is_added_without_losing_anything(self):
+        self._old_database()
+        self.assertNotIn("wrong_attempts", self._columns())
+
+        app = create_app({"TESTING": True, "DATABASE": self.path,
+                          "SECRET_KEY": "test", "ADMIN_USER": "prof",
+                          "ADMIN_PASSWORD": "secret"})
+        self.assertIn("wrong_attempts", self._columns())
+
+        import sqlite3
+        conn = sqlite3.connect(self.path)
+        row = conn.execute(
+            "SELECT attempts, solved, wrong_attempts FROM task").fetchone()
+        conn.close()
+        # Les copies d'avant ne sont pas sanctionnées rétroactivement.
+        self.assertEqual(row, (5, 1, 0))
+
+        # Idempotent : un deuxième démarrage ne rejoue pas l'ajout.
+        create_app({"TESTING": True, "DATABASE": self.path,
+                    "SECRET_KEY": "test", "ADMIN_USER": "prof",
+                    "ADMIN_PASSWORD": "secret"})
+        self.assertEqual(self._columns().count("wrong_attempts"), 1)
+        self.assertIsNotNone(app)
+
+
 class EnvFileTest(unittest.TestCase):
     """Le deploiement depose un .env : create_app doit le lire."""
 
@@ -613,10 +861,40 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(scoring.penalty_for(9), 3.0)
 
     def test_bounds(self):
-        self.assertEqual(scoring.final_score(8, 8, 0), 20.0)
-        self.assertEqual(scoring.final_score(0, 8, 0), 0.0)
-        self.assertEqual(scoring.final_score(4, 8, 20), 0.0)
-        self.assertEqual(scoring.final_score(0, 0, 0), 0.0)
+        self.assertEqual(scoring.final_score([1.0] * 8, 8, 0), 20.0)
+        self.assertEqual(scoring.final_score([], 8, 0), 0.0)
+        self.assertEqual(scoring.final_score([1.0] * 4, 8, 20), 0.0)
+        self.assertEqual(scoring.final_score([], 0, 0), 0.0)
+
+    def test_a_failed_attempt_eats_a_share_of_the_exercise(self):
+        """Quatre réponses possibles, trois fausses : un tiers par essai."""
+        self.assertEqual(scoring.kept_share(4, 0), 1.0)
+        self.assertAlmostEqual(scoring.kept_share(4, 1), 2 / 3)
+        self.assertAlmostEqual(scoring.kept_share(4, 2), 1 / 3)
+        self.assertEqual(scoring.kept_share(4, 3), 0.0)
+
+    def test_the_share_follows_the_number_of_possible_answers(self):
+        """Plus l'exercice offre de réponses, moins un essai coûte cher."""
+        self.assertAlmostEqual(scoring.kept_share(16, 1), 14 / 15)
+        self.assertEqual(scoring.kept_share(16, 15), 0.0)
+        # Quinze réponses fausses au lieu de trois : l'essai coûte cinq
+        # fois moins cher sur le même exercice.
+        self.assertAlmostEqual(scoring.attempt_cost(8, 4),
+                               5 * scoring.attempt_cost(8, 16))
+
+    def test_trying_every_answer_earns_nothing(self):
+        """Épuiser les réponses ramène l'exercice à zéro, jamais au-dessous."""
+        for choices in (4, 16):
+            for wrong in range(choices - 1, choices + 8):
+                with self.subTest(choices=choices, wrong=wrong):
+                    self.assertEqual(scoring.kept_share(choices, wrong), 0.0)
+
+    def test_the_cost_is_proportional_to_the_value_of_an_exercise(self):
+        """Le même exercice coûte moins cher dans une session plus longue."""
+        self.assertEqual(scoring.attempt_cost(4, 4), 5.0 / 3)
+        self.assertEqual(scoring.attempt_cost(8, 4), 2.5 / 3)
+        self.assertEqual(scoring.exercise_value(8), 2.5)
+        self.assertEqual(scoring.exercise_value(0), 0.0)
 
 
 class CatalogueTest(unittest.TestCase):
@@ -633,6 +911,25 @@ class CatalogueTest(unittest.TestCase):
         for module in ex.MODULES:
             for key in module.keys:
                 self.assertIn(key, ex.PATTERNS, "%s/%s" % (module.key, key))
+
+    def test_every_exercise_can_be_brought_to_zero(self):
+        """Épuiser les réponses d'un exercice doit toujours l'annuler."""
+        for key in ex.ALL_KEYS:
+            with self.subTest(exercice=key):
+                choices = ex.answer_space(key)
+                self.assertGreaterEqual(choices, 2, key)
+                self.assertEqual(scoring.kept_share(choices, choices - 1), 0.0)
+                self.assertGreater(scoring.kept_share(choices, choices - 2), 0.0)
+
+    def test_the_answer_space_counts_the_menu_combinations(self):
+        """Deux menus de quatre options font seize réponses, pas huit."""
+        self.assertEqual(ex.answer_space("carre"), 4)
+        self.assertEqual(ex.answer_space("triangle_droite"), 16)
+        # La prédiction n'a pas de menu : elle reçoit l'allocation par défaut.
+        for key in ex.ALL_KEYS:
+            if ex.PATTERNS[key].mode == "predict":
+                with self.subTest(exercice=key):
+                    self.assertEqual(ex.answer_space(key), ex.PREDICT_CHOICES)
 
     def test_every_module_is_described(self):
         for module in ex.MODULES:

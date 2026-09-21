@@ -42,6 +42,7 @@
     stats.appendChild(tile("Copies remises",
       data.stats.finished + " / " + data.stats.count));
     stats.appendChild(tile("Sorties de fenêtre", data.stats.exits));
+    stats.appendChild(tile("Essais manqués", data.stats.wrong));
   }
 
   function th(text, cls) {
@@ -65,8 +66,20 @@
     // Les sorties passent en deuxième : c'est ce que l'enseignant surveille
     // en priorité pendant l'épreuve.
     row.appendChild(th("Sorties"));
-    data.patterns.forEach(function (p) { row.appendChild(th(p.name, "rotate")); });
+    // Le titre ouvre la fiche de l'exercice (cf. admin_preview.js).
+    data.patterns.forEach(function (p) {
+      var cell = th("", "rotate");
+      var button = document.createElement("button");
+      button.type = "button";
+      button.textContent = p.name;
+      button.setAttribute("data-detail", p.key);
+      button.setAttribute("aria-haspopup", "dialog");
+      button.title = "Voir les attendus de l'exercice";
+      cell.appendChild(button);
+      row.appendChild(cell);
+    });
     row.appendChild(th("Réussis"));
+    row.appendChild(th("Essais manqués"));
     row.appendChild(th("Pénalité"));
     row.appendChild(th("Note /20"));
     row.appendChild(th("\u00c9tat"));
@@ -78,7 +91,7 @@
     if (!data.students.length) {
       var empty = document.createElement("tr");
       var cell = document.createElement("td");
-      cell.colSpan = data.patterns.length + 6;
+      cell.colSpan = data.patterns.length + 7;
       cell.className = "muted";
       cell.textContent = data.status === "open"
         ? "En attente des étudiants…"
@@ -112,9 +125,12 @@
         var dot = document.createElement("span");
         // Glyphe + title : le statut ne repose jamais sur la couleur seule.
         if (c.solved) {
-          dot.className = "dot done";
+          // Un exercice trouve apres des essais manques ne vaut plus le
+          // meme nombre de points : la pastille le dit.
+          dot.className = c.wrong ? "dot done costly" : "dot done";
           dot.textContent = "✓";
-          dot.title = "Reussi en " + c.attempts + " tentative(s)";
+          dot.title = "Reussi en " + c.attempts + " tentative(s)"
+            + (c.wrong ? ", dont " + c.wrong + " essai(s) manqué(s)" : "");
         } else if (c.attempts > 0) {
           dot.className = "dot tried";
           dot.textContent = c.attempts;
@@ -129,6 +145,13 @@
       });
 
       row.appendChild(td(s.solved + " / " + s.total, "num"));
+      var wrong = td(s.wrong ? String(s.wrong) : "—", "num");
+      if (s.lost > 0) {
+        wrong.className = "num name-warn";
+        wrong.title = s.lost.toFixed(2).replace(".", ",")
+          + " point(s) laissé(s) en essais manqués";
+      }
+      row.appendChild(wrong);
       row.appendChild(td(s.penalty ? "−" + s.penalty.toFixed(0) : "—", "num"));
       row.appendChild(td(s.score.toFixed(2), "num strong"));
 

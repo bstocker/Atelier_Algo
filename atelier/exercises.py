@@ -9,10 +9,11 @@ Ajouter un module tient en trois gestes : un fichier dans
 """
 
 from .engine import (  # noqa: F401  — réexportés pour le reste de l'appli
-    BLANK_PLACEHOLDER, LEVELS, Chapter, InfiniteLoop, Module, Option, Pattern,
-    PATTERNS, broken_rows, build_rows, build_trace, code_template, compare,
-    debug_pattern, draw_params, option_note, predict_from, register,
-    render_code, shuffled_blanks, specs, substitute, target_rows,
+    BLANK_PLACEHOLDER, LEVELS, PREDICT_CHOICES, Chapter, InfiniteLoop, Module,
+    Option, Pattern, PATTERNS, answer_space, broken_rows, build_rows,
+    build_trace, code_template, compare, debug_pattern, draw_params,
+    option_note, predict_from, register, render_code, shuffled_blanks, specs,
+    substitute, target_rows,
 )
 from .modules import (arguments, boucles, chaines, conditions,
                       recursif, tableaux)

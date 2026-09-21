@@ -172,7 +172,23 @@ legend { font-weight: 600; font-size: .9rem; padding: 0 .4rem; }
 .checks { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .check { display: flex; gap: .55rem; align-items: start; font-weight: 400;
          padding: .5rem; border-radius: 8px; background: var(--surface-0); }
+.check-body { display: block; }
+.check-title { display: block; margin-bottom: .1rem; }
+.check-brief { display: block; font-weight: 400; cursor: pointer; }
 .check em { display: block; font-style: normal; color: var(--text-muted); font-size: .8rem; }
+/* Le titre ouvre la fiche de l'exercice : souligne en pointilles pour le
+   dire, sans se faire passer pour un lien de navigation. */
+.exo-title {
+  display: inline; padding: 0; border: 0; background: none;
+  font: 600 .95rem/1.3 "Inter", system-ui, sans-serif;
+  color: var(--text-primary); text-align: left; cursor: pointer;
+  text-decoration: underline dotted var(--border-strong);
+  text-underline-offset: 3px;
+}
+.exo-title:hover {
+  background: none; color: var(--accent);
+  text-decoration: underline dotted var(--accent);
+}
 /* Réservé au formulaire de composition : nomme le défaut d'un exercice de
    diagnostic, ce que l'énoncé se garde bien de faire. */
 .check em.teacher-note { margin-top: .2rem; color: var(--accent); font-weight: 500; }
@@ -268,6 +284,9 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
   background: var(--surface-2); font-weight: 700;
 }
 .dot.done { background: var(--good-bg); border-color: var(--good); color: var(--good); }
+/* Reussi, mais apres des essais manques : le liseré le dit sans effacer la
+   coche, et l'infobulle donne le compte. */
+.dot.done.costly { border-color: var(--exit-once); border-style: dashed; }
 .dot.tried { background: var(--warning-bg); border-color: var(--warning);
              color: var(--text-primary); }
 .stale { opacity: .45; }
@@ -287,6 +306,9 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
                  letter-spacing: .07em; color: var(--text-secondary); }
 .joincode { font-size: 2.2rem; font-weight: 700; letter-spacing: .12em; }
 .session-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+/* Les deux pastilles de l'en-tete : la mise, puis l'etat. */
+.panel-pills { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+               justify-content: end; }
 .panel-head { display: flex; justify-content: space-between; align-items: start;
               gap: 1rem; flex-wrap: wrap; }
 .panel-head > h1:first-child, .panel-head > h2:first-child,
@@ -396,32 +418,73 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
 /* Chapitres : le regroupement le plus large — un langage, un domaine */
 .chapter {
   border: 1px solid var(--border-strong); border-radius: var(--radius);
-  padding: 1rem 1.1rem 0.4rem; margin-bottom: 1.25rem;
+  padding: 0 1.1rem; margin-bottom: 1.25rem;
   background: var(--surface-1);
 }
-.chapter-head {
-  display: flex; justify-content: space-between; align-items: start;
-  gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;
-}
-.chapter-title { margin: 0 0 .2rem; font-size: 1.25rem; }
-.chapter-head .hint { margin: 0; max-width: 52ch; }
+.chapter[open] { padding-bottom: .4rem; }
+.chapter-title { margin: 0; font-size: 1.25rem; }
 .chapter .module { background: var(--surface-0); }
 
 /* Modules : le premier niveau de regroupement du catalogue */
 .module {
   border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 1rem 1.1rem; margin-bottom: 1.1rem;
+  padding: 0 1.1rem; margin-bottom: 1.1rem;
 }
+.module[open] { padding-bottom: .4rem; }
 .module + .module { margin-top: .25rem; }
-.module-head {
-  display: flex; justify-content: space-between; align-items: start;
-  gap: 1rem; flex-wrap: wrap; margin-bottom: .9rem;
-}
 .module-title {
   display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-  margin: 0 0 .2rem; font-size: 1.05rem;
+  margin: 0; font-size: 1.05rem;
 }
-.module-head .hint { margin: 0; max-width: 52ch; }
+
+/* En-tetes repliables : le catalogue tient sur plusieurs ecrans, on le
+   parcourt plie. Tout le bandeau est cliquable, pas seulement le chevron.
+   Une grille plutot qu'une boite flexible : le titre et son resume se
+   rangent l'un sous l'autre sans envelopper le chevron ni les boutons. */
+.chapter-head, .module-head {
+  display: grid; align-items: center; gap: .15rem .75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "fold title tools" "fold hint tools";
+  padding: .95rem 0; cursor: pointer; list-style: none;
+}
+.chapter-head::-webkit-details-marker,
+.module-head::-webkit-details-marker { display: none; }
+.chapter-head::before, .module-head::before {
+  grid-area: fold; content: "▸"; color: var(--text-muted);
+  transition: transform .15s ease;
+}
+details[open] > .chapter-head::before,
+details[open] > .module-head::before { transform: rotate(90deg); }
+.chapter-title, .module-title { grid-area: title; }
+.chapter-head > .hint, .module-head > .hint { grid-area: hint; max-width: 52ch; }
+.chapter-head:hover .chapter-title,
+.module-head:hover .module-title { color: var(--accent); }
+.chapter-head:focus-visible, .module-head:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px;
+}
+.head-tools {
+  grid-area: tools; display: flex; align-items: center; gap: .5rem;
+  flex-wrap: wrap; justify-content: end;
+}
+@media (max-width: 620px) {
+  .chapter-head, .module-head {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "fold title" "fold hint" "fold tools";
+  }
+  .head-tools { justify-content: start; margin-top: .4rem; }
+}
+.head-tools .ghost { padding: .3rem .6rem; font-size: .8rem; }
+/* Un pli ne doit jamais cacher une selection : l'en-tete porte le compte. */
+.pick-count {
+  font: 600 .78rem/1 "JetBrains Mono", ui-monospace, monospace;
+  padding: .3rem .5rem; border-radius: 999px; white-space: nowrap;
+  background: var(--surface-1); color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.pick-count.none {
+  background: var(--surface-2); color: var(--text-muted);
+  border-color: var(--border);
+}
 
 /* Fil d'ariane au-dessus du titre d'exercice */
 .eyebrow {
@@ -471,6 +534,15 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
   padding: .12rem .45rem; border-radius: 5px; margin-right: .3rem;
   background: var(--surface-0); border: 1px solid var(--border);
 }
+.chip[data-detail] { cursor: pointer; margin-bottom: .3rem; }
+.chip[data-detail]:hover { background: var(--surface-2); border-color: var(--accent); }
+.live th.rotate button {
+  font: inherit; padding: 0; border: 0; background: none; cursor: pointer;
+  color: inherit; text-align: left;
+  text-decoration: underline dotted var(--border-strong);
+  text-underline-offset: 2px;
+}
+.live th.rotate button:hover { background: none; color: var(--accent); }
 .picker { display: flex; gap: .4rem; margin-bottom: .9rem; }
 .picker .ghost { padding: .3rem .6rem; font-size: .8rem; }
 #tally { display: block; margin-top: .2rem; color: var(--text-secondary); }
@@ -546,6 +618,76 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
   color: var(--critical); margin-bottom: .5rem;
 }
 .overlay-tally { font-weight: 600; margin-bottom: 1.25rem; }
+
+/* ---------- Fiche d'un exercice, cote enseignant ---------- */
+
+/* Un <dialog> n'est visible que replie sur [open] : mettre le flex sur
+   .sheet seule le laisserait affiche en permanence. */
+.sheet {
+  width: min(900px, calc(100vw - 2rem)); max-height: calc(100vh - 3rem);
+  padding: 0; overflow: hidden;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface-1); color: var(--text-primary);
+  box-shadow: var(--shadow);
+}
+.sheet[open] { display: flex; flex-direction: column; }
+.sheet::backdrop { background: rgb(8 8 8 / 55%); backdrop-filter: blur(3px); }
+.sheet-head {
+  display: flex; justify-content: space-between; align-items: start; gap: 1rem;
+  padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border);
+}
+.sheet-head h2 { margin: 0; }
+.sheet-head .title-row {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+}
+.sheet-head .muted { margin: .3rem 0 0; max-width: 70ch; }
+#sheet-close { padding: .3rem .6rem; line-height: 1; }
+.sheet-body {
+  overflow-y: auto; padding: 1.25rem 1.5rem; display: grid; gap: 1.25rem;
+}
+.sheet-foot {
+  margin: 0; padding: .7rem 1.5rem; background: var(--surface-0);
+  border-top: 1px solid var(--border);
+}
+.sheet-section h3 { margin: 0 0 .45rem; font-size: .95rem; }
+.sheet-section p { margin: 0; font-size: .92rem; }
+.sheet-section ul { margin: 0; padding-left: 1.2rem; }
+.sheet-section li { margin-bottom: .25rem; font-size: .92rem; }
+.sheet-section code {
+  background: var(--surface-2); padding: .1em .35em; border-radius: 4px;
+  font-size: .9em;
+}
+.sheet-section pre.ascii { min-height: 0; }
+.sheet pre.code { margin-bottom: 0; }
+.sheet-outputs {
+  display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.sheet-teacher-note { margin: 0; background: var(--warning-bg);
+                      border-left: 3px solid var(--serious); }
+
+/* Reponses de reference : la bonne porte une coche, pas seulement un fond. */
+.sheet-section p.sheet-label { margin: .8rem 0 .35rem; font-weight: 600; }
+.sheet-section ul.answers {
+  list-style: none; padding-left: 0; display: grid; gap: .35rem;
+}
+.answers li { margin-bottom: 0; }
+.answer {
+  display: flex; gap: .55rem; align-items: baseline;
+  padding: .45rem .6rem; border-radius: 6px;
+  background: var(--surface-0); border: 1px solid var(--border);
+}
+.answer.ok-answer { background: var(--good-bg); border-color: var(--good); }
+.answer-mark { font-weight: 700; color: var(--text-muted); }
+.ok-answer .answer-mark { color: var(--good); }
+.answer-text em {
+  display: block; margin-top: .2rem; font-style: normal;
+  font-size: .85rem; color: var(--text-secondary);
+}
+
+@media (max-width: 620px) {
+  .sheet { width: 100vw; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

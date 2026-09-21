@@ -15,20 +15,31 @@
     <tbody>
       <tr><th>Motifs réussis</th><td>{{ solved }} / {{ total }}</td></tr>
       <tr><th>Note brute</th><td>{{ '%.2f'|format(base) }} / 20</td></tr>
+      {% if clean > base %}
+      <tr><th>Essais manqués</th>
+          <td class="ko">&minus;{{ '%.2f'|format(clean - base) }}
+              <span class="muted">(sans eux&nbsp;: {{ '%.2f'|format(clean) }} / 20)</span></td></tr>
+      {% endif %}
       <tr><th>Sorties de fenêtre</th><td>{{ student['exit_count'] }}</td></tr>
       <tr><th>Pénalités</th><td>&minus;{{ '%.2f'|format(student['penalty_points']) }}</td></tr>
     </tbody>
   </table>
 
   <h2>Détail par motif</h2>
+  <p class="hint">Chaque motif vaut {{ '%.2f'|format(value) }} point{{ 's' if value >= 2 }}.
+     Un essai manqué en retire une part : les avoir tous essayés ramène le
+     motif à zéro.</p>
   <table class="table">
-    <thead><tr><th>Motif</th><th>Resultat</th><th>Tentatives</th></tr></thead>
+    <thead><tr><th>Motif</th><th>Resultat</th><th>Tentatives</th>
+               <th>Essais manqués</th><th>Points</th></tr></thead>
     <tbody>
-      {% for name, solved_flag, attempts in details %}
+      {% for d in details %}
       <tr>
-        <td>{{ name }}</td>
-        <td>{% if solved_flag %}<span class="ok">réussi</span>{% else %}<span class="ko">non réussi</span>{% endif %}</td>
-        <td>{{ attempts }}</td>
+        <td>{{ d.name }}</td>
+        <td>{% if d.solved %}<span class="ok">réussi</span>{% else %}<span class="ko">non réussi</span>{% endif %}</td>
+        <td class="num">{{ d.attempts }}</td>
+        <td class="num">{% if d.wrong %}<span class="ko">{{ d.wrong }}</span>{% else %}—{% endif %}</td>
+        <td class="num strong">{{ '%.2f'|format(d.points) }}</td>
       </tr>
       {% endfor %}
     </tbody>
