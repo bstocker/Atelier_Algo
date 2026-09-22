@@ -15,9 +15,21 @@
   <h1>Prêt à commencer&nbsp;?</h1>
   <p class="muted">L'épreuve s'ouvre en plein écran. Restez dans la fenêtre
      jusqu'à la remise de votre copie.</p>
+  {% if exam %}
+  <p class="hint">Les exercices valent tous le même nombre de points.
+     Vous pouvez revenir sur une réponse autant de fois que vous voulez&nbsp;:
+     c'est celle qui figure dans votre copie à la remise qui compte, et un
+     essai manqué ne vous coûte aucun point.</p>
+  <p class="notice"><strong>Mode examen.</strong> Vos réponses sont
+     enregistrées, mais l'application ne vous dira pas si elles sont justes,
+     et votre note ne s'affichera pas&nbsp;: la liste des exercices indique
+     seulement ceux que vous avez traités. Vos sorties de fenêtre et leurs
+     pénalités, elles, restent affichées.</p>
+  {% else %}
   <p class="hint">Les exercices valent tous le même nombre de points. Chaque
      essai manqué en retire une part&nbsp;: les avoir tous essayés ramène
      l'exercice à zéro. Lisez avant de valider.</p>
+  {% endif %}
   <button type="button" class="primary" id="start-btn">Passer en plein écran et commencer</button>
   <p class="hint" id="gate-hint"></p>
 </div>
@@ -141,7 +153,12 @@
 
 {% block scripts %}
 <script>
-  window.ATELIER = { returnDelay: {{ return_delay }} };
+  window.ATELIER = {
+    returnDelay: {{ return_delay }},
+    // Mode examen : la page ne montre ni note ni verdict. Le serveur ne les
+    // envoie pas non plus — ce drapeau ne fait que l'habillage.
+    exam: {{ 'true' if exam else 'false' }}
+  };
 </script>
 <script src="{{ url_for('static', filename='js/proctor.js') }}"></script>
 <script src="{{ url_for('static', filename='js/exercise.js') }}"></script>

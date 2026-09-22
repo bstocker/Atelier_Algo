@@ -1,0 +1,15 @@
+{# Barre de l'espace enseignant, partagee par ses pages.
+
+   Le nom du compte y figure : nous sommes plusieurs a tenir des sessions
+   sur la meme installation, et l'auteur d'une session est inscrit dessus.
+   Le lien « Comptes » n'apparait que pour l'administrateur — les profils
+   qu'il cree tiennent des sessions, pas des comptes. #}
+{% if account %}<span class="pill" title="Compte connecté">{{ account }}</span>{% endif %}
+<a class="ghost" href="{{ url_for('admin.dashboard') }}">Sessions</a>
+<a class="ghost" href="{{ url_for('admin.history') }}">Historique</a>
+{% if account_is_root %}
+<a class="ghost" href="{{ url_for('admin.users') }}">Comptes</a>
+{% endif %}
+<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
+  <button type="submit" class="ghost">Déconnexion</button>
+</form>

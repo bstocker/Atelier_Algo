@@ -166,6 +166,24 @@ input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible
 }
 .code-input { text-transform: uppercase; letter-spacing: .18em; font-size: 1.1rem; }
 
+/* Deux champs cote a cote, alignes par le bas : l'intitule d'une session
+   et la case « Mode examen » se lisent d'un seul coup d'oeil. */
+.form-row { display: flex; gap: 1.25rem; align-items: flex-end; flex-wrap: wrap; }
+.form-row .grow { flex: 1 1 16rem; }
+/* La case et son explication, dans un cadre : ce reglage change la nature
+   de l'epreuve, il ne doit pas passer pour une option de detail. */
+.switch {
+  display: flex; gap: .6rem; align-items: start; flex: 1 1 22rem;
+  padding: .7rem .85rem; border-radius: 8px; cursor: pointer;
+  background: var(--surface-0); border: 1px solid var(--border-strong);
+}
+.switch:hover { border-color: var(--accent); }
+.switch input { margin-top: .2rem; flex: none; }
+.switch:has(input:checked) { box-shadow: inset 0 0 0 1px var(--accent);
+                             border-color: var(--accent); }
+.switch > span { display: grid; gap: .2rem; }
+.switch .hint { font-weight: 400; }
+
 fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
 legend { font-weight: 600; font-size: .9rem; padding: 0 .4rem; }
 
@@ -219,6 +237,10 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 }
 .pill.ok   { background: var(--good-bg); color: var(--good); border-color: var(--good); }
 .pill.warn { background: var(--critical-bg); color: var(--critical); border-color: var(--critical); }
+/* Mode examen : ni reussite ni faute, un regime d'epreuve. D'ou l'accent,
+   et non le vert ni le rouge des statuts. */
+.pill.exam { background: var(--surface-1); color: var(--accent);
+             border-color: var(--accent); }
 
 .alert {
   background: var(--critical-bg); border: 1px solid var(--critical);
@@ -322,6 +344,11 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 .tasknav button[aria-current="true"] { border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent); }
 .tasknav button.done { background: var(--good-bg); border-color: var(--good); }
+/* Mode examen : « traite » se marque par un fond neutre et la case cochee
+   du libelle. Le vert de .done dirait « reussi », ce que l'eleve n'a pas
+   a savoir avant que l'enseignant ne le lui dise. */
+.tasknav button.answered { background: var(--surface-2); font-weight: 700;
+                           border-color: var(--text-muted); }
 .tasknav .level-dots { margin-right: .35rem; font-size: .62rem; }
 .title-row { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
 .title-row h2 { margin: 0; }

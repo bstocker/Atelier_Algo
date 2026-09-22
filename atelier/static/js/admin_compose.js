@@ -54,8 +54,9 @@
     var n = boxes.filter(function (b) { return b.checked; }).length;
     if (!tally) return;
     if (n === 0) {
-      tally.textContent = "Aucun exercice sélectionné : la session en prendra "
-        + boxes.length + " par défaut.";
+      // Le formulaire arrive tout decoche, et le serveur refuse une session
+      // vide : le dire ici evite un aller-retour pour rien.
+      tally.textContent = "Aucun exercice sélectionné : cochez-en au moins un.";
       return;
     }
     tally.textContent = n + (n > 1 ? " exercices sélectionnés" : " exercice sélectionné")

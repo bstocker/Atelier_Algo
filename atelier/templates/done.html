@@ -6,6 +6,22 @@
   <p class="muted">{{ student['first_name'] }} {{ student['last_name'] }} —
      {{ student['session_title'] }}</p>
 
+{% if exam %}
+  {# Mode examen : la copie est enregistree, la note ne s'affiche pas ici.
+     Les sorties de fenetre, elles, restent visibles — elles ont ete
+     annoncees avant l'epreuve. #}
+  <p class="notice">Votre copie est enregistrée. Vos réponses ne sont plus
+     modifiables&nbsp;; votre note vous sera communiquée par votre
+     enseignant.</p>
+
+  <table class="table">
+    <tbody>
+      <tr><th>Questions traitées</th><td>{{ answered }} / {{ total }}</td></tr>
+      <tr><th>Sorties de fenêtre</th><td>{{ student['exit_count'] }}</td></tr>
+      <tr><th>Pénalités</th><td>&minus;{{ '%.2f'|format(student['penalty_points']) }}</td></tr>
+    </tbody>
+  </table>
+{% else %}
   <div class="score">
     <span class="score-value">{{ '%.2f'|format(score) }}</span>
     <span class="score-max">/ 20</span>
@@ -44,6 +60,8 @@
       {% endfor %}
     </tbody>
   </table>
+
+{% endif %}
 
   {% if incidents %}
   <h2>Sorties enregistrées</h2>

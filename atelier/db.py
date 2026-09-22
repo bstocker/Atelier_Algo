@@ -35,6 +35,8 @@ def close_db(_exc=None):
 # une base deployee avant l'ajout n'aurait jamais la colonne.
 ADDED_COLUMNS = (
     ("task", "wrong_attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("session", "exam_mode", "INTEGER NOT NULL DEFAULT 0"),
+    ("session", "created_by", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

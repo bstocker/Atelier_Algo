@@ -30,6 +30,18 @@ def tirages(pattern):
         yield params
 
 
+def un_exercice(mode):
+    """Premier exercice du catalogue dans ce mode.
+
+    Les tests du mode examen doivent couvrir les quatre modes ; les nommer
+    en dur les casserait au premier remaniement du catalogue.
+    """
+    for key in ex.ALL_KEYS:
+        if ex.PATTERNS[key].mode == mode:
+            return key
+    raise AssertionError("aucun exercice en mode %s" % mode)
+
+
 class AtelierTest(unittest.TestCase):
 
     def setUp(self):
@@ -93,6 +105,21 @@ class AtelierTest(unittest.TestCase):
         self.admin.post("/admin/sessions/%d/open" % session_id)
         _, resp = self.join(code)
         self.assertTrue(resp.headers["Location"].endswith("/exercice"))
+
+    def test_the_composition_form_starts_with_nothing_checked(self):
+        """L'enseignant coche son epreuve : rien n'est retenu d'avance."""
+        page = self.admin.get("/admin/").get_data(as_text=True)
+        cases = page.count('name="patterns"')
+        self.assertGreater(cases, 0)
+        # Aucune case cochee, ni parmi les exercices ni ailleurs.
+        self.assertNotIn("checked", page)
+
+    def test_a_session_without_any_exercise_is_refused(self):
+        """Un formulaire tout decoche ne doit pas donner le catalogue entier."""
+        resp = self.admin.post("/admin/sessions", data={"title": "Vide"})
+        self.assertIn("error=", resp.headers["Location"])
+        self.assertEqual(
+            self.admin.get("/admin/api/sessions/1/live").status_code, 404)
 
     def test_admin_area_requires_login(self):
         anon = self.app.test_client()
@@ -1124,6 +1151,500 @@ class QcmTest(unittest.TestCase):
         self.assertIn("git-les-bases", [m.key for m in ex.MODULES])
 
 
+class ExamModeTest(unittest.TestCase):
+    """Mode examen : l'eleve repond, et n'apprend rien de sa reussite.
+
+    Les tests portent sur ce que le serveur envoie, pas sur l'habillage :
+    une case cachee en CSS resterait lisible dans la reponse JSON, et
+    l'eleve n'a pas besoin de la page pour interroger l'API.
+    """
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.app = create_app({
+            "TESTING": True, "DATABASE": self.path, "SECRET_KEY": "test",
+            "ADMIN_USER": "prof", "ADMIN_PASSWORD": "secret",
+        })
+        self.admin = self.app.test_client()
+        self.admin.post("/admin/login",
+                        data={"username": "prof", "password": "secret"})
+        # Les quatre modes du catalogue : compléter, prédire, diagnostiquer,
+        # répondre à un QCM. Chacun a sa propre réponse à cacher.
+        self.keys = [un_exercice(m) for m in
+                     ("complete", "predict", "debug", "qcm")]
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    # -- utilitaires -------------------------------------------------------
+
+    def session_on(self, exam=True, patterns=None):
+        data = {"title": "Épreuve", "patterns": patterns or self.keys}
+        if exam:
+            data["exam_mode"] = "1"
+        resp = self.admin.post("/admin/sessions", data=data)
+        session_id = int(resp.headers["Location"].rstrip("/").split("/")[-1])
+        self.admin.post("/admin/sessions/%d/open" % session_id)
+        page = self.admin.get("/admin/sessions/%d" % session_id)
+        code = page.get_data(as_text=True) \
+                   .split('class="joincode mono">')[1].split("<")[0].strip()
+        return session_id, code
+
+    def join(self, code, first="Ada", last="Lovelace"):
+        client = self.app.test_client()
+        client.post("/join", data={"first_name": first, "last_name": last,
+                                   "code": code})
+        return client
+
+    def answer(self, client, key, right=True):
+        """Repond a un exercice, juste ou faux, quel que soit son mode."""
+        task = client.get("/api/task/" + key).get_json()
+        pattern = ex.PATTERNS[key]
+        if pattern.mode == "predict":
+            lignes = ex.target_rows(key, task["params"])
+            body = {"answer": "\n".join(lignes) if right else "n'importe quoi"}
+        elif right:
+            body = {"selection": dict(pattern.ref)}
+        else:
+            blank_id = next(iter(pattern.blanks))
+            faux = [o.id for o in pattern.blanks[blank_id][1]
+                    if o.id != pattern.ref[blank_id]][0]
+            body = {"selection": dict(pattern.ref, **{blank_id: faux})}
+        return client.post("/api/task/%s/check" % key, json=body).get_json()
+
+    def solved_count(self, session_id):
+        """Exercices reussis, tels que l'enseignant les voit."""
+        live = self.admin.get(
+            "/admin/api/sessions/%d/live" % session_id).get_json()
+        return live["students"][0]["solved"]
+
+    # -- ce que l'eleve ne doit pas apprendre ------------------------------
+
+    # Tout ce qui, dans une reponse du serveur, dirait « juste » ou « faux ».
+    VERDICTS = ("ok", "first_time", "diff", "target", "note",
+                "count_mismatch", "stakes")
+
+    def test_no_answer_ever_carries_a_verdict(self):
+        """Ni juste, ni faux, ni la cible, ni la valeur de l'exercice."""
+        _, code = self.session_on()
+        eleve = self.join(code)
+        for key in self.keys:
+            for right in (True, False):
+                with self.subTest(pattern=key, juste=right):
+                    res = self.answer(eleve, key, right=right)
+                    self.assertTrue(res["complete"])
+                    self.assertTrue(res["exam"])
+                    for champ in self.VERDICTS:
+                        self.assertNotIn(champ, res)
+
+    def test_a_task_never_says_it_is_solved(self):
+        _, code = self.session_on()
+        eleve = self.join(code)
+        for key in self.keys:
+            self.answer(eleve, key)
+        for key in self.keys:
+            with self.subTest(pattern=key):
+                task = eleve.get("/api/task/" + key).get_json()
+                self.assertIsNone(task["solved"])
+                self.assertIsNone(task["stakes"])
+                self.assertTrue(task["answered"])
+                self.assertTrue(task["exam"])
+        for task in eleve.get("/api/me").get_json()["tasks"]:
+            self.assertIsNone(task["solved"])
+            self.assertIsNone(task["stakes"])
+            self.assertTrue(task["answered"])
+
+    def test_the_expected_output_of_a_prediction_stays_hidden(self):
+        """En mode ordinaire, trouver devoile la cible. En examen, jamais."""
+        key = un_exercice("predict")
+        _, code = self.session_on(patterns=[key])
+        eleve = self.join(code)
+        self.assertIsNone(self.answer(eleve, key).get("target"))
+        self.assertIsNone(eleve.get("/api/task/" + key).get_json()["target"])
+
+    def test_the_progress_counts_answers_and_hides_the_score(self):
+        _, code = self.session_on()
+        eleve = self.join(code)
+        self.answer(eleve, self.keys[0])
+        progress = eleve.get("/api/me").get_json()["progress"]
+        self.assertTrue(progress["exam"])
+        self.assertEqual(progress["answered"], 1)
+        self.assertEqual(progress["total"], len(self.keys))
+        self.assertIsNone(progress["score"])
+        self.assertIsNone(progress["solved"])
+        self.assertIsNone(progress["lost"])
+
+    def test_the_penalties_stay_visible(self):
+        """L'eleve voit ce que ses sorties lui coutent : c'etait annonce."""
+        _, code = self.session_on()
+        eleve = self.join(code)
+        for _ in range(2):
+            sortie = eleve.post("/api/incident", json={"kind": "blur"})
+        data = sortie.get_json()
+        self.assertEqual(data["ordinal"], 2)
+        self.assertEqual(data["total_penalty"], 2.0)
+        self.assertEqual(data["progress"]["penalty"], 2.0)
+        self.assertEqual(data["progress"]["exits"], 2)
+
+    def test_the_final_page_gives_no_result(self):
+        _, code = self.session_on()
+        eleve = self.join(code)
+        self.answer(eleve, self.keys[0])
+        eleve.post("/api/incident", json={"kind": "blur"})
+        eleve.post("/api/finish")
+        page = eleve.get("/termine").get_data(as_text=True)
+        self.assertIn("Questions traitées", page)
+        self.assertIn("Pénalités", page)          # les sorties, elles, restent
+        self.assertNotIn("/ 20", page)
+        self.assertNotIn("réussi", page)
+        self.assertNotIn("Détail par motif", page)
+
+    # -- ce que l'enseignant garde -----------------------------------------
+
+    def test_the_teacher_keeps_the_whole_truth(self):
+        """Le mode examen cache a l'eleve, jamais a l'enseignant."""
+        session_id, code = self.session_on()
+        eleve = self.join(code)
+        for key in self.keys:
+            self.answer(eleve, key, right=False)
+            self.answer(eleve, key, right=True)
+
+        live = self.admin.get(
+            "/admin/api/sessions/%d/live" % session_id).get_json()
+        self.assertTrue(live["exam_mode"])
+        copie = live["students"][0]
+        self.assertEqual(copie["solved"], len(self.keys))
+        # Les essais manques sont comptes — l'enseignant les lit — mais ne
+        # retirent rien : la copie vaut 20, et rien n'est « perdu ».
+        self.assertEqual(copie["wrong"], len(self.keys))
+        self.assertEqual(copie["score"], 20.0)
+        self.assertEqual(copie["lost"], 0.0)
+
+        # Et la note est figee a la cloture, comme pour toute session.
+        self.admin.post("/admin/sessions/%d/close" % session_id)
+        csv_export = self.admin.get(
+            "/admin/sessions/%d/export.csv" % session_id).get_data(as_text=True)
+        self.assertIn("LOVELACE Ada", csv_export)
+
+    # -- ce qu'un essai manque coute en examen : rien ---------------------
+
+    def test_a_wrong_attempt_costs_nothing(self):
+        """Sans retour, l'eleve ne peut pas chercher : on ne le sanctionne pas.
+
+        En entrainement, epuiser les reponses ramene l'exercice a zero — la
+        regle existe pour qu'on ne trouve pas la bonne en tatonnant. En
+        examen l'application ne dit plus quand on tombe juste : la sanction
+        n'a plus de cible.
+        """
+        key = un_exercice("qcm")
+        session_id, code = self.session_on(patterns=[key])
+        eleve = self.join(code)
+        for _ in range(3):
+            self.answer(eleve, key, right=False)
+        self.answer(eleve, key, right=True)
+
+        copie = self.admin.get(
+            "/admin/api/sessions/%d/live" % session_id).get_json()["students"][0]
+        self.assertEqual(copie["wrong"], 3)     # comptes pour l'enseignant
+        self.assertEqual(copie["lost"], 0.0)    # mais gratuits
+        self.assertEqual(copie["score"], 20.0)
+
+        # Et la note figee a la cloture suit la meme regle.
+        self.admin.post("/admin/sessions/%d/close" % session_id)
+        fige = self.admin.get(
+            "/admin/api/sessions/%d/live" % session_id).get_json()["students"][0]
+        self.assertEqual(fige["score"], 20.0)
+
+    def test_the_same_copy_is_punished_in_training(self):
+        """Le contre-exemple : hors examen, ces trois essais coutent tout."""
+        key = un_exercice("qcm")
+        session_id, code = self.session_on(exam=False, patterns=[key])
+        eleve = self.join(code)
+        for _ in range(3):
+            self.answer(eleve, key, right=False)
+        self.answer(eleve, key, right=True)
+
+        copie = self.admin.get(
+            "/admin/api/sessions/%d/live" % session_id).get_json()["students"][0]
+        self.assertEqual(copie["wrong"], 3)
+        self.assertEqual(copie["score"], 0.0)   # quatre reponses, trois ratees
+
+    def test_the_copy_is_judged_on_the_answer_it_holds(self):
+        """Trouver puis changer d'avis : c'est la derniere reponse qui compte.
+
+        Sans cela, un essai manque gratuit et une reussite acquise pour
+        toujours se combineraient en une faille : essayer les quatre
+        propositions garantirait le point.
+        """
+        for mode in ("qcm", "debug", "complete", "predict"):
+            key = un_exercice(mode)
+            session_id, code = self.session_on(patterns=[key])
+            eleve = self.join(code, last="Mode%s" % mode)
+            with self.subTest(mode=mode):
+                self.answer(eleve, key, right=True)
+                self.assertEqual(self.solved_count(session_id), 1)
+                self.answer(eleve, key, right=False)
+                self.assertEqual(self.solved_count(session_id), 0)
+                # Et l'on peut revenir : rien n'est definitif avant la remise.
+                self.answer(eleve, key, right=True)
+                self.assertEqual(self.solved_count(session_id), 1)
+
+    def test_exhausting_the_options_earns_nothing_by_itself(self):
+        """Passer en revue les quatre propositions ne garantit pas le point."""
+        key = un_exercice("qcm")
+        session_id, code = self.session_on(patterns=[key])
+        eleve = self.join(code)
+        pattern = ex.PATTERNS[key]
+        blank_id = next(iter(pattern.blanks))
+        # Toutes les propositions, dans l'ordre, la bonne au milieu.
+        for option in pattern.blanks[blank_id][1]:
+            eleve.post("/api/task/%s/check" % key,
+                       json={"selection": {blank_id: option.id}})
+        derniere = pattern.blanks[blank_id][1][-1].id
+        attendu = 1 if derniere == pattern.ref[blank_id] else 0
+        self.assertEqual(self.solved_count(session_id), attendu)
+
+    def test_an_emptied_answer_is_no_longer_acquired(self):
+        """Vider ses menus retire l'acquis : la copie ne porte plus rien."""
+        key = un_exercice("complete")
+        session_id, code = self.session_on(patterns=[key])
+        eleve = self.join(code)
+        self.answer(eleve, key, right=True)
+        self.assertEqual(self.solved_count(session_id), 1)
+        vide = eleve.post("/api/task/%s/check" % key,
+                          json={"selection": {}}).get_json()
+        self.assertFalse(vide["complete"])
+        self.assertEqual(self.solved_count(session_id), 0)
+
+    def test_a_training_answer_stays_acquired(self):
+        """Hors examen, un exercice trouve reste trouve : on peut y revenir."""
+        key = un_exercice("qcm")
+        session_id, code = self.session_on(exam=False, patterns=[key])
+        eleve = self.join(code)
+        self.answer(eleve, key, right=True)
+        self.answer(eleve, key, right=False)
+        self.assertEqual(self.solved_count(session_id), 1)
+
+    def test_the_session_view_says_it_is_an_exam(self):
+        session_id, _ = self.session_on()
+        page = self.admin.get("/admin/sessions/%d" % session_id)
+        self.assertIn("mode examen", page.get_data(as_text=True))
+
+    # -- et sans la case cochee, rien ne change ----------------------------
+
+    def test_an_ordinary_session_is_untouched(self):
+        _, code = self.session_on(exam=False)
+        eleve = self.join(code)
+        self.assertFalse(eleve.get("/api/me").get_json()["exam"])
+        for key in self.keys:
+            with self.subTest(pattern=key):
+                res = self.answer(eleve, key)
+                self.assertTrue(res["ok"])
+                self.assertTrue(res["first_time"])
+                self.assertFalse(res["exam"])
+                self.assertIsNotNone(res["stakes"])
+                self.assertIsNotNone(res["progress"]["score"])
+                task = eleve.get("/api/task/" + key).get_json()
+                self.assertTrue(task["solved"])
+        eleve.post("/api/finish")
+        self.assertIn("/ 20", eleve.get("/termine").get_data(as_text=True))
+
+    def test_exam_mode_is_off_unless_asked(self):
+        _, code = self.session_on(exam=False)
+        eleve = self.join(code)
+        progress = eleve.get("/api/me").get_json()["progress"]
+        self.assertFalse(progress["exam"])
+        self.assertEqual(progress["score"], 0.0)
+
+
+class AccountsTest(unittest.TestCase):
+    """Comptes enseignants : l'administrateur les cree, eux ne peuvent pas."""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.app = create_app({
+            "TESTING": True, "DATABASE": self.path, "SECRET_KEY": "test",
+            "ADMIN_USER": "prof", "ADMIN_PASSWORD": "secret",
+        })
+        self.admin = self.app.test_client()
+        self.admin.post("/admin/login",
+                        data={"username": "prof", "password": "secret"})
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    # -- utilitaires -------------------------------------------------------
+
+    def create(self, username="c.durand", password="motdepasse"):
+        return self.admin.post("/admin/comptes",
+                               data={"username": username,
+                                     "password": password})
+
+    def refusal(self, response):
+        location = response.headers["Location"]
+        self.assertIn("error=", location)
+        return urllib.parse.unquote_plus(location.split("error=")[1])
+
+    def signed_in(self, username="c.durand", password="motdepasse"):
+        client = self.app.test_client()
+        resp = client.post("/admin/login",
+                           data={"username": username, "password": password})
+        return client, resp
+
+    def rows(self, sql, args=()):
+        import sqlite3
+        conn = sqlite3.connect(self.path)
+        try:
+            return conn.execute(sql, args).fetchall()
+        finally:
+            conn.close()
+
+    # -- ce qu'un profil peut faire ----------------------------------------
+
+    def test_a_profile_runs_sessions_like_the_administrator(self):
+        self.create()
+        prof2, resp = self.signed_in()
+        self.assertEqual(resp.headers["Location"], "/admin/")
+
+        created = prof2.post("/admin/sessions",
+                             data={"title": "TP de C. Durand",
+                                   "patterns": ["carre"]})
+        session_id = int(created.headers["Location"].rstrip("/").split("/")[-1])
+        self.assertEqual(prof2.post("/admin/sessions/%d/open" % session_id)
+                         .status_code, 302)
+        self.assertEqual(prof2.get("/admin/sessions/%d" % session_id)
+                         .status_code, 200)
+        self.assertEqual(prof2.get("/admin/api/sessions/%d/live" % session_id)
+                         .status_code, 200)
+        self.assertEqual(prof2.get("/admin/sessions/%d/export.csv" % session_id)
+                         .status_code, 200)
+        self.assertEqual(prof2.get("/admin/historique").status_code, 200)
+
+        # La session porte le nom de son auteur : nous sommes plusieurs.
+        self.assertEqual(
+            self.rows("SELECT created_by FROM session")[0][0], "c.durand")
+        self.assertIn("c.durand",
+                      self.admin.get("/admin/").get_data(as_text=True))
+
+    # -- ce qu'un profil ne peut pas faire ---------------------------------
+
+    def test_a_profile_cannot_touch_the_accounts(self):
+        self.create()
+        self.create("a.martin")
+        victime = self.rows(
+            "SELECT id FROM teacher WHERE username = 'a.martin'")[0][0]
+        prof2, _ = self.signed_in()
+        self.assertEqual(prof2.get("/admin/comptes").status_code, 403)
+        self.assertEqual(prof2.post("/admin/comptes",
+                                    data={"username": "intrus",
+                                          "password": "motdepasse"}).status_code,
+                         403)
+        self.assertEqual(prof2.post("/admin/comptes/%d/password" % victime,
+                                    data={"password": "autrechose"}).status_code,
+                         403)
+        self.assertEqual(prof2.post("/admin/comptes/%d/delete" % victime)
+                         .status_code, 403)
+        # Aucun compte cree, aucun mot de passe change, personne supprime.
+        self.assertEqual(len(self.rows("SELECT id FROM teacher")), 2)
+        self.assertIsNotNone(self.signed_in("a.martin")[1]
+                             .headers.get("Location"))
+        self.assertEqual(self.signed_in("a.martin")[1].headers["Location"],
+                         "/admin/")
+        # Et le lien vers les comptes ne lui est meme pas propose.
+        self.assertNotIn("/admin/comptes",
+                         prof2.get("/admin/").get_data(as_text=True))
+
+    def test_the_accounts_page_needs_a_session_at_all(self):
+        anon = self.app.test_client()
+        self.assertEqual(anon.get("/admin/comptes").status_code, 302)
+        self.assertEqual(anon.post("/admin/comptes",
+                                   data={"username": "intrus",
+                                         "password": "motdepasse"}).status_code,
+                         302)
+        self.assertEqual(len(self.rows("SELECT id FROM teacher")), 0)
+
+    # -- garde-fous a la creation ------------------------------------------
+
+    def test_a_duplicate_identifier_is_refused(self):
+        self.create()
+        self.assertIn("déjà", self.refusal(self.create()))
+        # Meme a la casse pres : deux « c.durand » seraient indiscernables.
+        self.assertIn("déjà", self.refusal(self.create("C.Durand")))
+        self.assertEqual(len(self.rows("SELECT id FROM teacher")), 1)
+
+    def test_the_administrator_identifier_cannot_be_taken(self):
+        self.assertIn("administrateur", self.refusal(self.create("prof")))
+        self.assertIn("administrateur", self.refusal(self.create("PROF")))
+
+    def test_a_short_password_is_refused(self):
+        self.assertIn("caractères", self.refusal(self.create(password="court")))
+        self.assertEqual(len(self.rows("SELECT id FROM teacher")), 0)
+
+    def test_an_empty_identifier_is_refused(self):
+        self.assertIn("obligatoire", self.refusal(self.create("   ")))
+
+    def test_a_password_is_never_stored_in_clear(self):
+        self.create(password="motdepasse")
+        stored = self.rows("SELECT password_hash FROM teacher")[0][0]
+        self.assertNotIn("motdepasse", stored)
+        self.assertGreater(len(stored), 30)
+
+    def test_a_wrong_password_opens_nothing(self):
+        self.create()
+        _, resp = self.signed_in(password="pas-le-bon")
+        self.assertEqual(resp.status_code, 200)     # la page de connexion
+        self.assertIn("incorrects", resp.get_data(as_text=True))
+
+    # -- reinitialisation et suppression -----------------------------------
+
+    def test_the_administrator_replaces_a_password(self):
+        self.create()
+        teacher_id = self.rows("SELECT id FROM teacher")[0][0]
+        self.admin.post("/admin/comptes/%d/password" % teacher_id,
+                        data={"password": "nouveau-mot"})
+        self.assertEqual(self.signed_in(password="nouveau-mot")[1]
+                         .headers["Location"], "/admin/")
+        self.assertEqual(self.signed_in(password="motdepasse")[1].status_code,
+                         200)
+        court = self.admin.post("/admin/comptes/%d/password" % teacher_id,
+                                data={"password": "court"})
+        self.assertIn("caractères", self.refusal(court))
+
+    def test_a_deleted_profile_cannot_sign_in_anymore(self):
+        self.create()
+        prof2, _ = self.signed_in()
+        created = prof2.post("/admin/sessions",
+                             data={"title": "TP", "patterns": ["carre"]})
+        teacher_id = self.rows("SELECT id FROM teacher")[0][0]
+        self.admin.post("/admin/comptes/%d/delete" % teacher_id)
+        self.assertEqual(len(self.rows("SELECT id FROM teacher")), 0)
+        self.assertEqual(self.signed_in()[1].status_code, 200)
+        # Sa session reste : elle porte les copies des eleves.
+        self.assertEqual(len(self.rows("SELECT id FROM session")), 1)
+        self.assertIsNotNone(created)
+
+    def test_deleting_an_unknown_account_says_so(self):
+        self.assertIn("introuvable",
+                      self.refusal(self.admin.post("/admin/comptes/404/delete")))
+
+    def test_the_environment_administrator_is_not_in_the_list(self):
+        self.create()
+        page = self.admin.get("/admin/comptes").get_data(as_text=True)
+        self.assertIn("c.durand", page)
+        self.assertIn("ATELIER_ADMIN_USER", page)
+        self.assertNotIn("<td class=\"strong\">prof</td>", page)
+
+
 class MigrationTest(unittest.TestCase):
     """Une base deja deployee doit survivre a l'ajout d'une colonne."""
 
@@ -1140,15 +1661,27 @@ class MigrationTest(unittest.TestCase):
                 pass
 
     def _old_database(self):
-        """Le schéma courant, privé de la colonne ajoutée après coup."""
+        """Le schéma courant, privé des colonnes ajoutées après coup."""
         import sqlite3
         here = os.path.dirname(os.path.abspath(__file__))
         with open(os.path.join(here, "atelier", "schema.sql"),
                   encoding="utf-8") as fh:
             schema = fh.read()
-        for table, column, _decl in db.ADDED_COLUMNS:
-            schema = "\n".join(line for line in schema.splitlines()
-                               if not line.strip().startswith(column))
+
+        # Le rattrapage se fait par (table, colonne) : on ne retire la ligne
+        # que de la table concernée. Une même colonne peut exister dans deux
+        # tables — `created_by` est sur `session` comme sur `teacher`.
+        retirer = {(t, c) for t, c, _decl in db.ADDED_COLUMNS}
+        table, gardees = None, []
+        marqueur = "CREATE TABLE IF NOT EXISTS "
+        for line in schema.splitlines():
+            nu = line.strip()
+            if nu.startswith(marqueur):
+                table = nu[len(marqueur):].split("(")[0].strip()
+            if (table, nu.split(" ")[0]) not in retirer:
+                gardees.append(line)
+        schema = "\n".join(gardees)
+
         conn = sqlite3.connect(self.path)
         conn.executescript(schema)
         conn.execute("""INSERT INTO session (code, title, patterns, created_at)
@@ -1162,11 +1695,12 @@ class MigrationTest(unittest.TestCase):
         conn.commit()
         conn.close()
 
-    def _columns(self):
+    def _columns(self, table="task"):
         import sqlite3
         conn = sqlite3.connect(self.path)
         try:
-            return [row[1] for row in conn.execute("PRAGMA table_info(task)")]
+            return [row[1] for row in
+                    conn.execute("PRAGMA table_info(%s)" % table)]
         finally:
             conn.close()
 
@@ -1193,6 +1727,52 @@ class MigrationTest(unittest.TestCase):
                     "ADMIN_PASSWORD": "secret"})
         self.assertEqual(self._columns().count("wrong_attempts"), 1)
         self.assertIsNotNone(app)
+
+
+    def test_the_session_columns_arrive_on_an_existing_base(self):
+        """Une base d'avant le mode examen doit l'acquerir, sans rien perdre."""
+        self._old_database()
+        self.assertNotIn("exam_mode", self._columns("session"))
+        self.assertNotIn("created_by", self._columns("session"))
+
+        create_app({"TESTING": True, "DATABASE": self.path,
+                    "SECRET_KEY": "test", "ADMIN_USER": "prof",
+                    "ADMIN_PASSWORD": "secret"})
+        self.assertIn("exam_mode", self._columns("session"))
+        self.assertIn("created_by", self._columns("session"))
+
+        import sqlite3
+        conn = sqlite3.connect(self.path)
+        row = conn.execute(
+            "SELECT title, exam_mode, created_by FROM session").fetchone()
+        conn.close()
+        # Les sessions d'avant ne basculent pas en examen par surprise.
+        self.assertEqual(row, ("ancienne", 0, ""))
+
+    def test_the_accounts_table_appears_on_an_existing_base(self):
+        """La table des comptes manque a une base d'avant : elle est creee."""
+        import sqlite3
+        self._old_database()
+        # `_old_database` rejoue le schema courant : la table des comptes y
+        # est. On la retire pour retrouver une base d'avant leur arrivee.
+        conn = sqlite3.connect(self.path)
+        conn.execute("DROP TABLE teacher")
+        conn.commit()
+        conn.close()
+        self.assertEqual(self._columns("teacher"), [])
+
+        app = create_app({"TESTING": True, "DATABASE": self.path,
+                          "SECRET_KEY": "test", "ADMIN_USER": "prof",
+                          "ADMIN_PASSWORD": "secret"})
+        self.assertIn("password_hash", self._columns("teacher"))
+
+        # Et l'administrateur peut y creer un compte des ce demarrage.
+        client = app.test_client()
+        client.post("/admin/login",
+                    data={"username": "prof", "password": "secret"})
+        resp = client.post("/admin/comptes", data={"username": "c.durand",
+                                                   "password": "motdepasse"})
+        self.assertIn("ok=", resp.headers["Location"])
 
 
 class EnvFileTest(unittest.TestCase):
@@ -1297,6 +1877,23 @@ class ScoringTest(unittest.TestCase):
             for wrong in range(choices - 1, choices + 8):
                 with self.subTest(choices=choices, wrong=wrong):
                     self.assertEqual(scoring.kept_share(choices, wrong), 0.0)
+
+    def test_wrong_attempts_can_be_ignored_altogether(self):
+        """Regime du mode examen : la reussite garde sa valeur pleine."""
+        def quatre(_key):
+            return 4
+
+        taches = [{"pattern_key": "x", "wrong_attempts": 3, "solved": 1},
+                  {"pattern_key": "x", "wrong_attempts": 0, "solved": 1},
+                  {"pattern_key": "x", "wrong_attempts": 9, "solved": 0}]
+        self.assertEqual(scoring.shares_of(taches, quatre), [0.0, 1.0])
+        self.assertEqual(scoring.shares_of(taches, quatre, count_wrong=False),
+                         [1.0, 1.0])
+        # Un exercice jamais trouve ne rapporte rien dans les deux regimes.
+        self.assertEqual(
+            scoring.base_score(
+                scoring.shares_of(taches, quatre, count_wrong=False), 3),
+            round(20.0 * 2 / 3, 2))
 
     def test_the_cost_is_proportional_to_the_value_of_an_exercise(self):
         """Le même exercice coûte moins cher dans une session plus longue."""

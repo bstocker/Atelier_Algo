@@ -1,11 +1,25 @@
 PRAGMA journal_mode = WAL;
 
+-- Comptes enseignants crees par l'administrateur. Le compte administrateur
+-- lui-meme n'est pas ici : il vient des variables d'environnement, et il est
+-- le seul a pouvoir creer, reinitialiser ou supprimer les comptes ci-dessous.
+CREATE TABLE IF NOT EXISTS teacher (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT    NOT NULL,
+    created_by    TEXT    NOT NULL DEFAULT '',
+    created_at    TEXT    NOT NULL,
+    last_login_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS session (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     code        TEXT    NOT NULL UNIQUE,
     title       TEXT    NOT NULL,
     patterns    TEXT    NOT NULL,              -- JSON : liste de cles de motifs
     status      TEXT    NOT NULL DEFAULT 'draft',  -- draft | open | closed
+    exam_mode   INTEGER NOT NULL DEFAULT 0,       -- 1 : l'eleve ne voit pas sa reussite
+    created_by  TEXT    NOT NULL DEFAULT '',      -- compte qui a cree la session
     created_at  TEXT    NOT NULL,
     opened_at   TEXT,
     closed_at   TEXT

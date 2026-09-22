@@ -48,6 +48,11 @@
     penaltyPill: document.getElementById("penalty-pill")
   };
 
+  // Mode examen : ni note, ni verdict, ni vert. Le serveur ne les envoie
+  // pas non plus (cf. `in_exam` dans student.py) ; ce drapeau ne commande
+  // que l'habillage — les libellés, et la liste du bandeau supérieur.
+  var EXAM = !!(window.ATELIER && window.ATELIER.exam);
+
   var tasks = [];
   var progress = null;     // dernier état renvoyé par le serveur
   var modules = [];        // intitulés des modules couverts par la session
@@ -84,20 +89,36 @@
     return value.toFixed(2).replace(".", ",") + " pt" + (value >= 2 ? "s" : "");
   }
 
+  // Nombre de tentatives, en mots : sert d'etat d'exercice en mode examen,
+  // la ou le mode ordinaire annonce « reussi ».
+  function attemptLabel(attempts) {
+    return attempts
+      ? "répondu · " + attempts + " tentative" + (attempts > 1 ? "s" : "")
+      : "pas encore répondu";
+  }
+
   function showProgress(p) {
     progress = p;
-    el.progressPill.textContent = p.solved + " / " + p.total + " motifs";
+    // En examen, le compteur dit combien de questions sont traitees. Le
+    // nombre de reussites, lui, ne sort pas du serveur.
+    el.progressPill.textContent = p.exam
+      ? p.answered + " / " + p.total + " traités"
+      : p.solved + " / " + p.total + " motifs";
+    // Les penalites restent affichees dans les deux modes : une sanction
+    // annoncee avant l'epreuve doit se voir pendant.
     if (p.penalty > 0) {
       el.penaltyPill.hidden = false;
       el.penaltyPill.textContent = String.fromCharCode(8722)
         + p.penalty.toFixed(0) + " pts · " + p.exits + " sortie"
         + (p.exits > 1 ? "s" : "");
     }
-    el.finishHint.textContent = "Note actuelle : " + p.score.toFixed(2)
-      + " / 20"
-      + (p.lost > 0 ? " · " + points(p.lost) + " laissés en essais manqués"
-                    : "")
-      + ". La remise est définitive.";
+    el.finishHint.textContent = p.exam
+      ? "Questions traitées : " + p.answered + " / " + p.total
+        + ". La remise est définitive."
+      : "Note actuelle : " + p.score.toFixed(2) + " / 20"
+        + (p.lost > 0 ? " · " + points(p.lost) + " laissés en essais manqués"
+                      : "")
+        + ". La remise est définitive.";
   }
 
   // Cout reel de l'essai qui vient d'etre fait : l'ecart entre ce que
@@ -147,11 +168,17 @@
   function navButton(task) {
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.className = task.solved ? "done" : "";
-    btn.title = "Difficulté : " + task.level_name;
+    // En examen, la case cochee dit « traite », pas « juste » : d'ou une
+    // teinte neutre et une case a cocher, et non le vert du mode ordinaire.
+    btn.className = EXAM ? (task.answered ? "answered" : "")
+                         : (task.solved ? "done" : "");
+    btn.title = "Difficulté : " + task.level_name
+      + (EXAM ? " · " + (task.answered ? "question traitée"
+                                       : "pas encore traitée") : "");
     btn.appendChild(levelDots(task.level));
     btn.appendChild(document.createTextNode(
-      (task.solved ? "✓ " : "") + task.name));
+      (EXAM ? (task.answered ? "☑ " : "☐ ") : (task.solved ? "✓ " : ""))
+      + task.name));
     if (current && current.key === task.key) {
       btn.setAttribute("aria-current", "true");
     }
@@ -407,10 +434,11 @@
       // son énoncé, et un tiret orphelin se verrait.
       el.brief.textContent = data.mode === "qcm" ? ""
         : [data.brief, data.why].filter(Boolean).join(" — ");
-      el.state.textContent = data.solved
-        ? "✓ réussi" : "en cours · " + data.attempts + " tentative"
+      el.state.textContent = EXAM ? attemptLabel(data.attempts)
+        : data.solved ? "✓ réussi"
+        : "en cours · " + data.attempts + " tentative"
           + (data.attempts > 1 ? "s" : "");
-      el.state.className = data.solved ? "pill ok" : "pill";
+      el.state.className = (!EXAM && data.solved) ? "pill ok" : "pill";
       showStakes(data.stakes, data.solved);
       el.feedback.textContent = "";
       el.feedback.className = "feedback";
@@ -425,6 +453,40 @@
       }
       renderNav();
     });
+  }
+
+  // Mode examen : la reponse est enregistree, et l'ecran n'en dit pas plus.
+  // Pas de verdict, pas de diff coloree, pas de mise en jeu — rien que
+  // l'eleve pourrait lire comme « juste » ou « faux ».
+  function showExamResult(res) {
+    current.attempts = res.attempts;
+    current.answered = true;
+    tasks.forEach(function (t) {
+      if (t.key === current.key) t.answered = true;
+    });
+    el.state.textContent = attemptLabel(res.attempts);
+    el.state.className = "pill";
+
+    if (current.mode === "complete") {
+      if (res.infinite) {
+        // Un fait sur son propre code, pas une correction : sans arret, il
+        // n'y a aucune sortie a afficher.
+        el.output.textContent = "Cette boucle ne s'arrête jamais : "
+          + "aucune sortie à afficher.";
+      } else {
+        // Sans marques : les lignes s'affichent toutes de la meme facon.
+        renderLines(el.output, res.rows || []);
+      }
+      renderTrace(res.trace);
+    }
+
+    // Ce message est exact au mot : en examen la copie est jugee sur la
+    // reponse qu'elle porte, et revenir dessus ne coute rien.
+    el.feedback.textContent = "Réponse enregistrée. Vous pouvez la modifier "
+      + "jusqu'à la remise : c'est la dernière qui compte.";
+    el.feedback.className = "feedback";
+    renderNav();
+    showProgress(res.progress);
   }
 
   // --- Actions ------------------------------------------------------------
@@ -461,6 +523,7 @@
           el.feedback.className = "feedback ko";
           return;
         }
+        if (res.exam) { showExamResult(res); return; }
         if (radio) {
           // Un QCM ne commente pas les mauvaises réponses : le bandeau
           // reste fermé tant que l'élève n'a pas trouvé.
@@ -555,9 +618,13 @@
   // pour avoir cliqué sur « Remettre ma copie ». D'où cette boîte en page.
   el.finish.addEventListener("click", function () {
     if (progress) {
-      el.confirmRecap.textContent = progress.solved + " exercice"
-        + (progress.solved > 1 ? "s" : "") + " sur " + progress.total
-        + " · note actuelle " + progress.score.toFixed(2) + " / 20";
+      el.confirmRecap.textContent = progress.exam
+        ? progress.answered + " question" + (progress.answered > 1 ? "s" : "")
+          + " traitée" + (progress.answered > 1 ? "s" : "")
+          + " sur " + progress.total
+        : progress.solved + " exercice"
+          + (progress.solved > 1 ? "s" : "") + " sur " + progress.total
+          + " · note actuelle " + progress.score.toFixed(2) + " / 20";
     }
     el.confirmBox.hidden = false;
     el.confirmNo.focus();

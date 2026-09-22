@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Comptes enseignants{% endblock %}
+{% block main_class %}wrap wide{% endblock %}
+{% block topbar %}{% include "_admin_nav.html" %}{% endblock %}
+{% block content %}
+{% if notice %}<p class="notice ok-notice">{{ notice }}</p>{% endif %}
+{% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+
+<div class="card">
+  <h1>Nouveau compte enseignant</h1>
+  <p class="muted">Un compte enseignant fait tout ce que vous faites
+     ici&nbsp;: créer des sessions, les lancer, suivre les copies en direct,
+     exporter les notes, importer des QCM. <strong>Il ne peut pas créer de
+     compte</strong> — cette page reste la vôtre.</p>
+
+  <form method="post" action="{{ url_for('admin.create_user') }}" class="stack">
+    <div class="form-row">
+      <label class="grow">Identifiant
+        <input name="username" maxlength="40" required autocomplete="off"
+               placeholder="c.durand">
+      </label>
+      <label class="grow">Mot de passe
+        <input name="password" type="password" required autocomplete="new-password"
+               minlength="{{ min_password }}">
+      </label>
+    </div>
+    <p class="hint">{{ min_password }} caractères minimum. Il est stocké haché&nbsp;:
+       vous ne pourrez pas le relire, seulement le remplacer. Transmettez-le à
+       l'intéressé, qui se connecte sur la même page que vous.</p>
+    <button type="submit" class="primary">Créer le compte</button>
+  </form>
+</div>
+
+<div class="card">
+  <h1>Comptes existants</h1>
+  {% if teachers %}
+  <div class="tablewrap">
+    <table class="table">
+      <thead>
+        <tr><th>Identifiant</th><th>Créé le</th><th>Créé par</th>
+            <th>Dernière connexion</th><th>Nouveau mot de passe</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for t in teachers %}
+        <tr>
+          <td class="strong">{{ t['username'] }}</td>
+          <td class="mono">{{ (t['created_at'] or '')[:16]|replace('T', ' ') }}</td>
+          <td class="muted">{{ t['created_by'] or '—' }}</td>
+          <td class="mono">{{ (t['last_login_at'] or '')[:16]|replace('T', ' ') or '—' }}</td>
+          <td>
+            <form method="post" class="linkrow"
+                  action="{{ url_for('admin.reset_user_password', teacher_id=t['id']) }}">
+              <input name="password" type="password" required
+                     autocomplete="new-password" minlength="{{ min_password }}"
+                     aria-label="Nouveau mot de passe de {{ t['username'] }}">
+              <button type="submit" class="ghost">Remplacer</button>
+            </form>
+          </td>
+          <td>
+            <form method="post" class="inline"
+                  action="{{ url_for('admin.delete_user', teacher_id=t['id']) }}"
+                  onsubmit="return confirm('Supprimer le compte « {{ t['username'] }} » ? Ses sessions et les copies de ses élèves sont conservées.');">
+              <button type="submit" class="ghost danger-text">Supprimer</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Aucun compte enseignant pour le moment&nbsp;: vous êtes
+     seul à pouvoir ouvrir une session.</p>
+  {% endif %}
+  <p class="hint">Le compte administrateur, lui, vient des variables
+     d'environnement <code>ATELIER_ADMIN_USER</code> et
+     <code>ATELIER_ADMIN_PASSWORD</code>&nbsp;: il n'est pas dans cette liste
+     et ne peut pas être supprimé d'ici.</p>
+</div>
+{% endblock %}

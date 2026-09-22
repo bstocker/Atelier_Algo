@@ -10,6 +10,11 @@ prorata de sa valeur. Sans eux, un eleve pourrait essayer les reponses une
 par une jusqu'a tomber juste et decrocher la note pleine ; avec eux, les
 avoir toutes essayees ramene l'exercice a zero.
 
+Cette seconde sanction ne s'applique **pas en mode examen** : elle suppose
+que l'application dise a l'eleve quand il tombe juste, ce qu'elle ne fait
+plus. La copie y est jugee sur la reponse qu'elle porte a la remise —
+`shares_of(..., count_wrong=False)`.
+
 Ce module ne connait pas le catalogue : le nombre de reponses possibles
 d'un exercice lui est passe en argument.
 """
@@ -66,14 +71,22 @@ def attempt_cost(total, choices):
     return exercise_value(total) / allowance(choices)
 
 
-def shares_of(tasks, choices_of):
+def shares_of(tasks, choices_of, count_wrong=True):
     """Parts gardees sur les exercices reussis, dans l'ordre des taches.
 
     `choices_of` rend le nombre de reponses possibles d'un exercice : le
     bareme reste ainsi ignorant du catalogue. Les exercices non reussis
     ne rapportent rien et n'apparaissent pas ici.
+
+    `count_wrong` a False, un exercice reussi garde sa valeur pleine quels
+    qu'aient ete les essais : c'est le regime du **mode examen**. La
+    sanction y perdrait sa cible — elle existe pour qu'un eleve ne puisse
+    pas essayer les reponses une par une jusqu'a tomber juste, et cela
+    suppose qu'on lui dise quand il tombe juste. En examen on ne le lui dit
+    pas, et la copie est jugee sur la reponse qu'elle porte a la remise.
     """
-    return [kept_share(choices_of(task["pattern_key"]), task["wrong_attempts"])
+    return [kept_share(choices_of(task["pattern_key"]),
+                       task["wrong_attempts"] if count_wrong else 0)
             for task in tasks if task["solved"]]
 
 

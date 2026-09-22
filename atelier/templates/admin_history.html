@@ -1,12 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Historique des sessions{% endblock %}
 {% block main_class %}wrap wide{% endblock %}
-{% block topbar %}
-<a class="ghost" href="{{ url_for('admin.dashboard') }}">Sessions</a>
-<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
-  <button type="submit" class="ghost">Déconnexion</button>
-</form>
-{% endblock %}
+{% block topbar %}{% include "_admin_nav.html" %}{% endblock %}
 {% block content %}
 <div class="card">
   <h1>Historique</h1>
@@ -14,15 +9,18 @@
   <div class="tablewrap">
     <table class="table">
       <thead>
-        <tr><th>Clôturée le</th><th>Intitulé</th><th>Code</th><th>Élèves</th>
-            <th>Moyenne</th><th>Min</th><th>Max</th><th>Sorties</th><th></th></tr>
+        <tr><th>Clôturée le</th><th>Intitulé</th><th>Code</th><th>Créée par</th>
+            <th>Élèves</th><th>Moyenne</th><th>Min</th><th>Max</th>
+            <th>Sorties</th><th></th></tr>
       </thead>
       <tbody>
         {% for s in sessions %}
         <tr>
           <td class="mono">{{ (s['closed_at'] or '')[:16]|replace('T', ' ') }}</td>
-          <td>{{ s['title'] }}</td>
+          <td>{{ s['title'] }}
+              {% if s['exam_mode'] %}<span class="pill exam" title="L'étudiant n'a pas vu ses résultats">examen</span>{% endif %}</td>
           <td class="mono">{{ s['code'] }}</td>
+          <td class="muted">{{ s['created_by'] or '—' }}</td>
           <td>{{ s['students'] }}</td>
           <td class="strong">{{ '%.2f'|format(s['average']) if s['average'] is not none else '—' }}</td>
           <td>{{ '%.2f'|format(s['worst']) if s['worst'] is not none else '—' }}</td>

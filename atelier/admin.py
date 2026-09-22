@@ -5,11 +5,11 @@ import functools
 import io
 import json
 import random
-import secrets
 
-from flask import (Blueprint, Response, abort, jsonify, redirect,
+from flask import (Blueprint, Response, abort, current_app, jsonify, redirect,
                    render_template, request, session, url_for)
 
+from . import accounts
 from . import exercises as ex
 from . import qcm
 from . import scoring
@@ -21,7 +21,15 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
+# Clefs posees dans le cookie a la connexion. `is_root` distingue le compte
+# administrateur — celui des variables d'environnement — des profils qu'il a
+# crees : eux tiennent des sessions, lui seul tient les comptes.
+SESSION_USER = "admin_user"
+SESSION_ROOT = "is_root"
+
+
 def require_admin(view):
+    """Espace enseignant : administrateur ou profil créé par lui."""
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
         if not session.get("is_admin"):
@@ -30,6 +38,47 @@ def require_admin(view):
             return redirect(url_for("admin.login", next=request.path))
         return view(*args, **kwargs)
     return wrapped
+
+
+def require_root(view):
+    """Gestion des comptes : le seul coin reserve a l'administrateur.
+
+    Un profil enseignant qui tente d'y entrer recoit un 403, et non une
+    redirection vers la connexion : il est bien identifie, c'est le droit
+    qui manque.
+    """
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("is_admin"):
+            return redirect(url_for("admin.login", next=request.path))
+        if not session.get(SESSION_ROOT):
+            abort(403, description="Seul le compte administrateur gère les "
+                                   "comptes enseignants.")
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def who():
+    """Nom du compte connecte, tel qu'il sera inscrit sur ses sessions."""
+    return session.get(SESSION_USER, "")
+
+
+def forget_account():
+    """Retire les droits enseignant du cookie, et rien d'autre.
+
+    Le meme cookie porte aussi le jeton de l'eleve : un `session.clear()`
+    deconnecterait la copie ouverte dans le meme navigateur, ce qui arrive
+    sur le poste de demonstration de l'enseignant.
+    """
+    for key in ("is_admin", SESSION_USER, SESSION_ROOT):
+        session.pop(key, None)
+
+
+@bp.app_context_processor
+def inject_account():
+    """Le nom du compte et son droit sur les comptes, pour les gabarits."""
+    return {"account": who(),
+            "account_is_root": bool(session.get(SESSION_ROOT))}
 
 
 def new_code():
@@ -46,16 +95,17 @@ def new_code():
 
 @bp.route("/login", methods=("GET", "POST"))
 def login():
-    from flask import current_app
     error = None
     if request.method == "POST":
-        user = request.form.get("username", "")
-        password = request.form.get("password", "")
-        ok = (secrets.compare_digest(user, current_app.config["ADMIN_USER"])
-              & secrets.compare_digest(password,
-                                       current_app.config["ADMIN_PASSWORD"]))
-        if ok:
+        identified = accounts.verify(current_app.config,
+                                     request.form.get("username", ""),
+                                     request.form.get("password", ""))
+        if identified:
+            name, root = identified
+            forget_account()         # pas de droit herite d'une session d'avant
             session["is_admin"] = True
+            session[SESSION_USER] = name
+            session[SESSION_ROOT] = root
             target = request.args.get("next", "")
             return redirect(target if target.startswith("/admin")
                             else url_for("admin.dashboard"))
@@ -65,8 +115,61 @@ def login():
 
 @bp.post("/logout")
 def logout():
-    session.pop("is_admin", None)
+    forget_account()
     return redirect(url_for("admin.login"))
+
+
+# --------------------------------------------------------------------------
+# Comptes enseignants — administrateur seul
+# --------------------------------------------------------------------------
+
+@bp.get("/comptes")
+@require_root
+def users():
+    return render_template(
+        "admin_users.html", teachers=accounts.listing(),
+        min_password=accounts.MIN_PASSWORD,
+        notice=request.args.get("ok", ""),
+        error=request.args.get("error", ""),
+    )
+
+
+@bp.post("/comptes")
+@require_root
+def create_user():
+    """Ajoute un profil enseignant : sessions et résultats, pas les comptes."""
+    try:
+        name = accounts.create(current_app.config,
+                               request.form.get("username", ""),
+                               request.form.get("password", ""),
+                               created_by=who())
+    except accounts.BadAccount as refus:
+        return redirect(url_for("admin.users", error=str(refus)))
+    return redirect(url_for("admin.users",
+                            ok="Compte « %s » créé." % name))
+
+
+@bp.post("/comptes/<int:teacher_id>/password")
+@require_root
+def reset_user_password(teacher_id):
+    try:
+        name = accounts.set_password(teacher_id,
+                                    request.form.get("password", ""))
+    except accounts.BadAccount as refus:
+        return redirect(url_for("admin.users", error=str(refus)))
+    return redirect(url_for("admin.users",
+                            ok="Mot de passe de « %s » remplacé." % name))
+
+
+@bp.post("/comptes/<int:teacher_id>/delete")
+@require_root
+def delete_user(teacher_id):
+    name = accounts.delete(teacher_id)
+    if name is None:
+        return redirect(url_for("admin.users", error="Compte introuvable."))
+    # Ses sessions restent : elles portent les copies des eleves.
+    return redirect(url_for("admin.users",
+                            ok="Compte « %s » supprimé." % name))
 
 
 # --------------------------------------------------------------------------
@@ -208,14 +311,21 @@ def create_session():
     title = " ".join(request.form.get("title", "").split())[:120] \
         or "Session sans titre"
     keys = [k for k in request.form.getlist("patterns") if k in ex.PATTERNS]
+    # Le formulaire arrive tout decoche : prendre le catalogue entier en
+    # silence donnerait une epreuve de cinquante exercices a qui a oublie
+    # de cocher. On redemande.
     if not keys:
-        keys = list(ex.ALL_KEYS)
+        return redirect(url_for(
+            "admin.dashboard",
+            error="Cochez au moins un exercice : la session n'a pas été créée."))
     keys.sort(key=ex.ALL_KEYS.index)
 
     session_id = execute(
-        """INSERT INTO session (code, title, patterns, status, created_at)
-           VALUES (?, ?, ?, 'draft', ?)""",
-        (new_code(), title, json.dumps(keys), now()),
+        """INSERT INTO session (code, title, patterns, status, exam_mode,
+                                created_by, created_at)
+           VALUES (?, ?, ?, 'draft', ?, ?, ?)""",
+        (new_code(), title, json.dumps(keys),
+         1 if request.form.get("exam_mode") else 0, who(), now()),
     )
     return redirect(url_for("admin.session_view", session_id=session_id))
 
@@ -242,13 +352,17 @@ def close_session(session_id):
         return redirect(url_for("admin.session_view", session_id=session_id))
 
     total = len(json.loads(room["patterns"]))
+    # En mode examen, les essais manques ne retirent rien : voir
+    # `scoring.shares_of`. La note figee doit suivre la meme regle que
+    # celle qui s'affichait en direct.
+    count_wrong = not room["exam_mode"]
     db = get_db()
     stamp = now()
     for student in query("SELECT * FROM student WHERE session_id = ?",
                          (session_id,)):
         tasks = query("SELECT * FROM task WHERE student_id = ?",
                       (student["id"],))
-        shares = scoring.shares_of(tasks, ex.answer_space)
+        shares = scoring.shares_of(tasks, ex.answer_space, count_wrong)
         score = scoring.final_score(shares, total, student["penalty_points"])
         db.execute(
             """UPDATE student
@@ -291,6 +405,7 @@ def _live_payload(session_id):
         abort(404)
     keys = json.loads(room["patterns"])
     total = len(keys)
+    count_wrong = not room["exam_mode"]
 
     # Cette vue est interrogee toutes les 3 secondes : on lit toutes les
     # copies en deux requetes, pas en une par etudiant.
@@ -312,7 +427,7 @@ def _live_payload(session_id):
         tasks = by_student[student["id"]]
         ordered = [tasks[k] for k in keys if k in tasks]
         solved = sum(1 for t in tasks.values() if t["solved"])
-        shares = scoring.shares_of(ordered, ex.answer_space)
+        shares = scoring.shares_of(ordered, ex.answer_space, count_wrong)
         live = scoring.final_score(shares, total, student["penalty_points"])
         rows.append({
             "id": student["id"],
@@ -322,7 +437,9 @@ def _live_payload(session_id):
             "total": total,
             "attempts": sum(t["attempts"] for t in tasks.values()),
             "wrong": sum(t["wrong_attempts"] for t in tasks.values()),
-            # Ce que les essais manques ont deja coute a la copie.
+            # Ce que les essais manques ont deja coute a la copie. En mode
+            # examen, ils ne coutent rien : la colonne reste a zero, alors
+            # que « Essais manques » continue de les compter.
             "lost": round(scoring.base_score([1.0] * solved, total)
                           - scoring.base_score(shares, total), 2),
             "exits": student["exit_count"],
@@ -345,6 +462,9 @@ def _live_payload(session_id):
         "status": room["status"],
         "code": room["code"],
         "title": room["title"],
+        # L'enseignant garde tout : la note, les essais manques, le detail.
+        # Le mode examen ne cache rien ici, il ne cache qu'a l'eleve.
+        "exam_mode": bool(room["exam_mode"]),
         # L'intitulé complet part en infobulle : deux QCM ont tous les deux
         # une « Q1 », et la colonne est trop étroite pour l'énoncé.
         "patterns": [{"key": k, "name": ex.PATTERNS[k].name,

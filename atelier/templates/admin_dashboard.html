@@ -2,12 +2,7 @@
 {% block title %}Sessions{% endblock %}
 
 {% block main_class %}wrap wide{% endblock %}
-{% block topbar %}
-<a class="ghost" href="{{ url_for('admin.history') }}">Historique</a>
-<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
-  <button type="submit" class="ghost">Déconnexion</button>
-</form>
-{% endblock %}
+{% block topbar %}{% include "_admin_nav.html" %}{% endblock %}
 {% block content %}
 {% if notice %}<p class="notice ok-notice">{{ notice }}</p>{% endif %}
 {% if error %}<p class="alert">{{ error }}</p>{% endif %}
@@ -95,9 +90,22 @@
 <div class="card">
   <h1>Nouvelle session</h1>
   <form method="post" action="{{ url_for('admin.create_session') }}" class="stack">
-    <label>Intitulé
-      <input name="title" maxlength="120" placeholder="TP boucles imbriquees — groupe B1" required>
-    </label>
+    <div class="form-row">
+      <label class="grow">Intitulé
+        <input name="title" maxlength="120" placeholder="TP boucles imbriquees — groupe B1" required>
+      </label>
+      <label class="switch" for="exam-mode">
+        <input type="checkbox" name="exam_mode" id="exam-mode" value="1">
+        <span>
+          <strong>Mode examen</strong>
+          <span class="hint">L'étudiant ne voit ni sa note ni la justesse de
+             ses réponses. Ses pénalités de sortie restent affichées, et vous
+             gardez le détail complet dans le suivi direct. Les essais manqués
+             ne coûtent rien&nbsp;: la copie est jugée sur la réponse qu'elle
+             porte à la remise.</span>
+        </span>
+      </label>
+    </div>
     <fieldset>
       <legend>Exercices de l'épreuve</legend>
       <p class="hint">
@@ -153,8 +161,7 @@
                 <!-- Le titre est un bouton, donc hors du <label> : la case
                      reprend son nom et son intitule par aria-labelledby. -->
                 <input type="checkbox" id="pick-{{ p.key }}" name="patterns" value="{{ p.key }}"
-                       aria-labelledby="nom-{{ p.key }} brief-{{ p.key }}"
-                       {% if p.level <= 2 %}checked{% endif %}>
+                       aria-labelledby="nom-{{ p.key }} brief-{{ p.key }}">
                 <span class="check-body">
                   <span class="check-title">
                     <button type="button" class="exo-title" id="nom-{{ p.key }}"
@@ -187,14 +194,17 @@
   <h1>Sessions en cours</h1>
   {% if sessions %}
   <table class="table">
-    <thead><tr><th>Code</th><th>Intitulé</th><th>État</th><th>Inscrits</th><th></th></tr></thead>
+    <thead><tr><th>Code</th><th>Intitulé</th><th>État</th><th>Inscrits</th>
+               <th>Créée par</th><th></th></tr></thead>
     <tbody>
       {% for s in sessions %}
       <tr>
         <td class="mono strong">{{ s['code'] }}</td>
-        <td>{{ s['title'] }}</td>
+        <td>{{ s['title'] }}
+            {% if s['exam_mode'] %}<span class="pill exam" title="L'étudiant ne voit pas ses résultats">examen</span>{% endif %}</td>
         <td><span class="pill {{ 'ok' if s['status'] == 'open' else '' }}">{{ 'ouverte' if s['status'] == 'open' else 'brouillon' }}</span></td>
         <td>{{ s['students'] }}</td>
+        <td class="muted">{{ s['created_by'] or '—' }}</td>
         <td><a class="ghost" href="{{ url_for('admin.session_view', session_id=s['id']) }}">Ouvrir</a></td>
       </tr>
       {% endfor %}

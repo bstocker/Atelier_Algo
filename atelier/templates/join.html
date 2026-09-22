@@ -12,6 +12,12 @@
   <h1>{{ room['title'] }}</h1>
   <p class="muted">Identifiez-vous avec votre nom et votre prénom pour
      rejoindre cette session.</p>
+  {% if room['exam_mode'] %}
+  <p class="muted"><strong>Épreuve en mode examen&nbsp;:</strong> vos réponses
+     sont enregistrées, mais l'application ne vous dira pas si elles sont
+     justes, et votre note ne s'affichera pas. Vous pouvez revenir sur une
+     réponse jusqu'à la remise&nbsp;: c'est la dernière qui compte.</p>
+  {% endif %}
   {% else %}
   <h1>Rejoindre une session</h1>
   <p class="muted">Identifiez-vous avec votre nom et votre prénom, puis saisissez

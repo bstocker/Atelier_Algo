@@ -1,18 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ room['title'] }}{% endblock %}
 {% block main_class %}wrap wide{% endblock %}
-{% block topbar %}
-<a class="ghost" href="{{ url_for('admin.dashboard') }}">Sessions</a>
-<a class="ghost" href="{{ url_for('admin.history') }}">Historique</a>
-<form method="post" action="{{ url_for('admin.logout') }}" class="inline">
-  <button type="submit" class="ghost">Déconnexion</button>
-</form>
-{% endblock %}
+{% block topbar %}{% include "_admin_nav.html" %}{% endblock %}
 {% block content %}
 <div class="card">
   <div class="panel-head">
     <div>
-      <h1>{{ room['title'] }}</h1>
+      <div class="title-row">
+        <h1>{{ room['title'] }}</h1>
+        {% if room['exam_mode'] %}
+        <span class="pill exam" title="L'étudiant ne voit pas ses résultats">mode examen</span>
+        {% endif %}
+      </div>
       <p class="muted">
         <strong>{{ modules|map(attribute='title')|join(' · ') }}</strong>
         — {{ motifs|length }} exercice{{ 's' if motifs|length > 1 }}
@@ -40,6 +39,23 @@
       <a class="ghost" href="{{ url_for('admin.export_csv', session_id=room['id']) }}">Export CSV</a>
     </div>
   </div>
+
+  {% if room['exam_mode'] %}
+  <p class="notice">
+    <strong>Mode examen.</strong> L'étudiant ne voit ni sa note, ni si ses
+    réponses sont justes&nbsp;: la liste du bandeau supérieur lui dit
+    seulement quelles questions il a traitées. Ses sorties de fenêtre et
+    leurs pénalités lui restent affichées. Vous gardez ci-dessous le détail
+    complet, et la note est calculée comme d'habitude à la clôture.
+  </p>
+  <p class="hint">Le barème s'adapte&nbsp;: en mode examen, <strong>un essai
+     manqué ne retire aucun point</strong> — sans retour, l'élève ne peut pas
+     chercher la bonne réponse en tâtonnant, la sanction n'aurait plus de
+     cible. En échange, <strong>la copie est jugée sur la réponse qu'elle
+     porte à la remise</strong> et non sur le fait d'avoir trouvé une fois&nbsp;:
+     un exercice réussi puis modifié n'est plus acquis. Les essais manqués
+     restent comptés dans la colonne du suivi, pour information.</p>
+  {% endif %}
 
   {% if room['status'] == 'draft' %}
   <p class="notice">La session est en brouillon&nbsp;: les étudiants ne peuvent

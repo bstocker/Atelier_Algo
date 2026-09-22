@@ -27,7 +27,7 @@ def current_student():
         return None
     return query(
         """SELECT s.*, x.status AS session_status, x.title AS session_title,
-                  x.code AS session_code
+                  x.code AS session_code, x.exam_mode AS session_exam
              FROM student s JOIN session x ON x.id = s.session_id
             WHERE s.token = ?""",
         (token,), one=True,
@@ -53,22 +53,57 @@ def touch(student_id):
             (now(), student_id))
 
 
+def in_exam(student):
+    """La session de cette copie est-elle en mode examen ?
+
+    En mode examen, rien de ce que le serveur renvoie a l'eleve ne dit s'il
+    a juste : ni note, ni verdict, ni diff, ni explication, ni valeur
+    d'exercice. Il voit ce qu'il a traite, et ce que ses sorties de fenetre
+    lui ont coute — une sanction annoncee reste annoncee.
+
+    Cote enseignant, rien ne change : la reussite, les essais manques et la
+    note sont enregistres et calcules comme d'habitude.
+    """
+    return bool(student["session_exam"])
+
+
+def forget_success(task_id):
+    """L'exercice n'est plus acquis : la copie ne porte plus de reponse.
+
+    Mode examen seulement. En entrainement, un exercice trouve reste
+    trouve — on peut y revenir pour comprendre, sans risque.
+    """
+    execute("UPDATE task SET solved = 0, solved_at = NULL WHERE id = ?",
+            (task_id,))
+
+
 def progress_of(student):
+    """Avancement de la copie, tel que l'eleve a le droit de le voir."""
     rows = tasks_of(student["id"])
     solved = sum(1 for t in rows if t["solved"])
-    shares = scoring.shares_of(rows, ex.answer_space)
-    return {
-        "solved": solved,
+    common = {
+        "exam": in_exam(student),
         "total": len(rows),
+        # Questions traitees : c'est tout ce que le bandeau superieur
+        # annonce en mode examen.
+        "answered": sum(1 for t in rows if t["attempts"]),
         "penalty": student["penalty_points"],
         "exits": student["exit_count"],
+    }
+    if common["exam"]:
+        return dict(common, solved=None, lost=None, score=None)
+
+    shares = scoring.shares_of(rows, ex.answer_space)
+    return dict(
+        common,
+        solved=solved,
         # Points laisses sur les exercices reussis a l'arrache : l'eleve doit
         # voir ce que ses essais manques lui ont deja coute.
-        "lost": round(scoring.base_score([1.0] * solved, len(rows))
-                      - scoring.base_score(shares, len(rows)), 2),
-        "score": scoring.final_score(shares, len(rows),
-                                     student["penalty_points"]),
-    }
+        lost=round(scoring.base_score([1.0] * solved, len(rows))
+                   - scoring.base_score(shares, len(rows)), 2),
+        score=scoring.final_score(shares, len(rows),
+                                  student["penalty_points"]),
+    )
 
 
 def stakes_of(task, total):
@@ -209,6 +244,7 @@ def exercise_page():
     return render_template(
         "exercise.html",
         student=student,
+        exam=in_exam(student),
         return_delay=scoring.RETURN_DELAY_SECONDS,
     )
 
@@ -219,15 +255,25 @@ def done_page():
     if student is None:
         return redirect(url_for("student.join_form"))
     rows = tasks_of(student["id"])
+    incidents = query(
+        "SELECT * FROM incident WHERE student_id = ? ORDER BY ordinal",
+        (student["id"],),
+    )
+
+    if in_exam(student):
+        # Copie remise, et rien d'autre : ni note, ni detail par exercice.
+        # Seules les sorties de fenetre restent, avec ce qu'elles ont coute.
+        return render_template(
+            "done.html", student=student, exam=True, total=len(rows),
+            answered=sum(1 for t in rows if t["attempts"]),
+            incidents=incidents,
+        )
+
     solved = sum(1 for t in rows if t["solved"])
     shares = scoring.shares_of(rows, ex.answer_space)
     score = student["final_score"]
     if score is None:
         score = scoring.final_score(shares, len(rows), student["penalty_points"])
-    incidents = query(
-        "SELECT * FROM incident WHERE student_id = ? ORDER BY ordinal",
-        (student["id"],),
-    )
     value = scoring.exercise_value(len(rows))
     # « Q1 » ne dit rien hors de son module. On préfixe donc les intitulés
     # quand la session croise plusieurs sujets, et seulement dans ce cas —
@@ -240,7 +286,8 @@ def done_page():
         return "%s · %s" % (ex.module_of(key).title, name) if situer else name
 
     return render_template(
-        "done.html", student=student, solved=solved, total=len(rows),
+        "done.html", student=student, exam=False,
+        solved=solved, total=len(rows),
         score=score, base=scoring.base_score(shares, len(rows)),
         # Note qu'aurait valu la meme copie sans aucun essai manque : c'est
         # l'ecart, pas le total, qui fait comprendre le bareme.
@@ -267,11 +314,13 @@ def api_me():
     student = require_student()
     touch(student["id"])
     rows = tasks_of(student["id"])
+    exam = in_exam(student)
     return jsonify({
         "first_name": student["first_name"],
         "last_name": student["last_name"],
         "session_title": student["session_title"],
         "session_status": student["session_status"],
+        "exam": exam,
         "finished": bool(student["finished_at"]),
         "progress": progress_of(student),
         # Les intitulés de module ne servent que si la session en croise
@@ -284,10 +333,13 @@ def api_me():
             "level": ex.PATTERNS[t["pattern_key"]].level,
             "level_name": ex.LEVELS[ex.PATTERNS[t["pattern_key"]].level],
             "module": ex.module_of(t["pattern_key"]).title,
-            "solved": bool(t["solved"]),
+            # En examen, la liste dit « traité », jamais « réussi » : pas de
+            # `solved`, pas de mise en jeu, donc rien a colorer en vert.
+            "solved": None if exam else bool(t["solved"]),
+            "answered": bool(t["attempts"]),
             "attempts": t["attempts"],
             "wrong": t["wrong_attempts"],
-            "stakes": stakes_of(t, len(rows)),
+            "stakes": None if exam else stakes_of(t, len(rows)),
         } for t in rows],
     })
 
@@ -305,6 +357,7 @@ def api_task(key):
     pattern = ex.PATTERNS[key]
     params = json.loads(task["params"])
     stored = json.loads(task["selection"])
+    exam = in_exam(student)
     solved = bool(task["solved"])
 
     payload = {
@@ -318,16 +371,20 @@ def api_task(key):
         "module": ex.module_of(key).title,
         "params": params,
         "lesson": list(pattern.lesson),
-        "solved": solved,
+        "exam": exam,
+        "solved": None if exam else solved,
+        "answered": bool(task["attempts"]),
         "attempts": task["attempts"],
-        "stakes": stakes_of(task, task_count(student["id"])),
+        "stakes": None if exam else stakes_of(task, task_count(student["id"])),
     }
 
     if pattern.mode == "predict":
-        # La cible est la reponse : elle ne descend qu'une fois trouvee.
+        # La cible est la reponse : elle ne descend qu'une fois trouvee, et
+        # jamais en mode examen, ou trouver n'ouvre plus rien.
         payload["code"] = ex.render_code(key, params)
         payload["answer"] = stored.get("answer", "")
-        payload["target"] = ex.target_rows(key, params) if solved else None
+        payload["target"] = (ex.target_rows(key, params)
+                             if solved and not exam else None)
     elif pattern.mode == "qcm":
         # Ni code ni sortie : une question, quatre propositions. L'ordre des
         # propositions est tire par la copie, il differe d'un eleve a l'autre.
@@ -370,6 +427,7 @@ def api_check(key):
     params = json.loads(task["params"])
     target = ex.target_rows(key, params)
     already = bool(task["solved"])
+    exam = in_exam(student)
 
     if pattern.mode in ("debug", "qcm"):
         # Meme forme dans les deux modes : un menu unique, des phrases, un
@@ -397,6 +455,10 @@ def api_check(key):
         while produced and not produced[-1].strip():
             produced.pop()
         if not produced:
+            # Meme regle qu'un menu vide : la copie d'examen ne porte plus
+            # de prediction, elle n'est donc plus acquise.
+            if exam:
+                forget_success(task["id"])
             touch(student["id"])
             return jsonify({"complete": False, "ok": False,
                             "message": "Écrivez la sortie attendue."})
@@ -412,6 +474,10 @@ def api_check(key):
                 (json.dumps(selection), task["id"]))
 
         if len(selection) < len(pattern.blanks):
+            # La selection incomplete vient d'etre enregistree : en examen,
+            # c'est elle que porte la copie, et elle ne vaut plus rien.
+            if exam:
+                forget_success(task["id"])
             touch(student["id"])
             return jsonify({"complete": False, "ok": False,
                             "code": ex.render_code(key, params, selection),
@@ -429,7 +495,19 @@ def api_check(key):
         note = None
 
     execute("UPDATE task SET attempts = attempts + 1 WHERE id = ?", (task["id"],))
-    if ok and not already:
+    if exam:
+        # En examen, la copie est jugee sur la reponse qu'elle porte a la
+        # remise : un exercice trouve puis modifie n'est plus acquis, et un
+        # exercice rate puis corrige l'est. Les essais manques sont comptes
+        # — l'enseignant les lit dans son suivi — mais ne coutent aucun
+        # point, faute de retour a exploiter (cf. `scoring.shares_of`).
+        execute("""UPDATE task
+                      SET solved = ?, solved_at = ?,
+                          wrong_attempts = wrong_attempts + ?
+                    WHERE id = ?""",
+                (1 if ok else 0, now() if ok else None, 0 if ok else 1,
+                 task["id"]))
+    elif ok and not already:
         execute("UPDATE task SET solved = 1, solved_at = ? WHERE id = ?",
                 (now(), task["id"]))
     elif not ok and not already:
@@ -441,12 +519,33 @@ def api_check(key):
     student = current_student()  # relit les compteurs a jour
     task = query("SELECT * FROM task WHERE id = ?", (task["id"],), one=True)
 
+    if exam:
+        # Mode examen : la reponse est enregistree, et c'est tout ce que
+        # l'eleve apprend. Ni verdict, ni cible, ni diff, ni explication, ni
+        # mise en jeu — rien de ce qui dirait s'il a juste.
+        body = {
+            "complete": True,
+            "exam": True,
+            "attempts": task["attempts"],
+            "progress": progress_of(student),
+        }
+        if pattern.mode == "complete":
+            # Sa propre sortie lui revient : c'est le produit de son code,
+            # pas une correction. A lui de la comparer a la cible.
+            body["rows"] = produced
+            body["trace"] = trace
+            body["infinite"] = infinite
+            body["code"] = ex.render_code(key, params, selection)
+        return jsonify(body)
+
     body = {
         "complete": True,
+        "exam": False,
         "ok": ok,
         "rows": produced,
         "trace": trace,
         "infinite": infinite,
+        "attempts": task["attempts"],
         "first_time": ok and not already,
         "stakes": stakes_of(task, task_count(student["id"])),
         "progress": progress_of(student),
@@ -541,8 +640,10 @@ def api_finish():
     student = require_student()
     if not student["finished_at"]:
         rows = tasks_of(student["id"])
-        score = scoring.final_score(scoring.shares_of(rows, ex.answer_space),
-                                    len(rows), student["penalty_points"])
+        shares = scoring.shares_of(rows, ex.answer_space,
+                                   count_wrong=not in_exam(student))
+        score = scoring.final_score(shares, len(rows),
+                                    student["penalty_points"])
         execute(
             "UPDATE student SET finished_at = ?, final_score = ? WHERE id = ?",
             (now(), score, student["id"]),

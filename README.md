@@ -68,8 +68,8 @@ Les quatre premiers servent à **déployer** :
 Les trois suivants **configurent l'application** elle-même. Le rôle de chacun est détaillé en séquence 4 :
 
 **ATELIER_SECRET_KEY** = une chaîne aléatoire, 32 caractères minimum.  
-**ATELIER_ADMIN_USER** = votre identifiant enseignant.  
-**ATELIER_ADMIN_PASSWORD** = votre mot de passe enseignant.  
+**ATELIER_ADMIN_USER** = votre identifiant administrateur.  
+**ATELIER_ADMIN_PASSWORD** = votre mot de passe administrateur.  
 
 💡 Le workflow refuse de déployer tant qu'un de ces 7 secrets manque, est vide ou est mal formé. Il vous dira lequel et pourquoi, dans le log de l'Action. **Créez-les tous les 7 maintenant**, sinon votre premier déploiement échouera.
   
@@ -89,8 +89,8 @@ L'application lit sa configuration dans des variables d'environnement. Vous n'av
 | Secret GitHub | Rôle | Obligatoire |
 | --- | --- | --- |
 | `ATELIER_SECRET_KEY` | Signe les cookies de session. Sans elle, n'importe qui peut forger un cookie d'enseignant et prendre la main sur vos sessions. | oui, 32 caractères minimum |
-| `ATELIER_ADMIN_USER` | Votre identifiant enseignant | oui |
-| `ATELIER_ADMIN_PASSWORD` | Votre mot de passe enseignant | oui |
+| `ATELIER_ADMIN_USER` | Votre identifiant **administrateur**. C'est le compte qui crée les comptes des autres enseignants. | oui |
+| `ATELIER_ADMIN_PASSWORD` | Votre mot de passe administrateur | oui |
 | `ATELIER_DATABASE` | Chemin du fichier SQLite | non, défaut `instance/atelier.sqlite` |
 | `ATELIER_TRUST_PROXY` | Mettre à `0` pour ignorer les en-têtes de proxy. À laisser tel quel sur PythonAnywhere : sans cela le lien de session serait fabriqué en `http://`. | non, actif par défaut |
 
@@ -115,14 +115,16 @@ Trois conséquences à connaître :
 ### Ouvrir votre première session
 
 1. Rendez-vous sur `/admin/login` et connectez-vous avec `ATELIER_ADMIN_USER` / `ATELIER_ADMIN_PASSWORD`.
-2. *(facultatif)* Pour ajouter vos propres QCM : carte **Importer un QCM**, bouton **Télécharger le modèle**, remplissez-le, redéposez-le. Le sous-module apparaît aussitôt sous le chapitre **QCM**. Format détaillé plus bas.
-3. Créez une session : donnez-lui un intitulé et cochez les exercices. Ils sont **groupés par chapitre, module puis niveau**, avec un bouton pour cocher un chapitre, un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
+2. *(facultatif)* Si vous êtes plusieurs à utiliser l'installation : onglet **Comptes**, créez un compte par collègue. Format détaillé plus bas.
+3. *(facultatif)* Pour ajouter vos propres QCM : carte **Importer un QCM**, bouton **Télécharger le modèle**, remplissez-le, redéposez-le. Le sous-module apparaît aussitôt sous le chapitre **QCM**. Format détaillé plus bas.
+4. Créez une session : donnez-lui un intitulé et cochez les exercices. **Le formulaire arrive entièrement décoché** : une épreuve se compose, elle ne se subit pas. Les exercices sont **groupés par chapitre, module puis niveau**, avec un bouton pour cocher un chapitre, un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
    Chapitres et modules **se replient** : le catalogue se parcourt sans dérouler cinquante-cinq intitulés, et chaque en-tête replié affiche le compte de ses exercices cochés. Les plis suivent l'enseignant d'une visite à l'autre.
    Un clic sur le **titre d'un exercice** ouvre sa fiche : voir plus bas.
-4. Cliquez sur **Lancer la session**.
-5. Copiez le **lien à transmettre** et envoyez-le à vos étudiants. Le code y est déjà : ils n'ont que leur nom et leur prénom à saisir. Le code reste affiché à côté si vous préférez le dicter.
-6. Suivez leurs réponses en direct sur la même page.
-7. Cliquez sur **Terminer la session** : les notes sont figées et la session bascule dans l'historique.
+   À côté de l'intitulé, la case **Mode examen** décide de ce que l'élève verra de ses résultats : voir plus bas.
+5. Cliquez sur **Lancer la session**.
+6. Copiez le **lien à transmettre** et envoyez-le à vos étudiants. Le code y est déjà : ils n'ont que leur nom et leur prénom à saisir. Le code reste affiché à côté si vous préférez le dicter.
+7. Suivez leurs réponses en direct sur la même page.
+8. Cliquez sur **Terminer la session** : les notes sont figées et la session bascule dans l'historique.
 
 
 ---------------------------------------------------
@@ -254,6 +256,75 @@ Le plus simple pour s'en assurer après un déploiement : cliquer sur **Téléch
 Dans la base — tables `qcm_module` et `qcm_question` — et non dans le code : un fichier déposé sur PythonAnywhere serait écrasé au déploiement suivant.
 
 Plusieurs processus servent l'application, et un import fait dans l'un doit être vu par les autres. `qcm.sync()` compare donc à chaque requête une **empreinte** de la base (nombre de modules, nombre de questions, dernier identifiant) au catalogue chargé, et ne rebâtit le registre que lorsqu'elle a changé. Le cas courant ne coûte qu'une requête.
+
+### Comptes : un administrateur, des enseignants
+
+Nous sommes plusieurs à tenir des sessions sur la même installation. Il y a donc deux sortes de comptes, et **une seule différence entre elles**.
+
+L'**administrateur** est celui des variables d'environnement (`ATELIER_ADMIN_USER` / `ATELIER_ADMIN_PASSWORD`). Il n'est pas dans la base : c'est le compte de secours, celui qui existe avant qu'aucune table ne soit remplie. **Lui seul gère les comptes**, depuis l'onglet **Comptes**.
+
+Un **compte enseignant** est créé par l'administrateur : un identifiant, un mot de passe de 8 caractères minimum. Il fait tout le reste de l'espace enseignant — créer des sessions, les lancer, suivre les copies en direct, exporter les notes, importer des QCM, clôturer, consulter l'historique. **Il ne peut pas créer de compte**, ni réinitialiser le mot de passe d'un autre, ni en supprimer un : la page des comptes lui répond `403`.
+
+| | Administrateur | Compte enseignant |
+| --- | --- | --- |
+| Créer, lancer, clôturer une session | oui | oui |
+| Suivi direct, export CSV, historique | oui | oui |
+| Importer et supprimer un QCM | oui | oui |
+| Supprimer une session clôturée, et ses copies | oui | oui |
+| Créer un compte, changer un mot de passe, supprimer un compte | **oui** | **non** |
+
+Trois points de mise en œuvre :
+
+- **Les mots de passe sont hachés** (`werkzeug.security`, scrypt) — jamais stockés en clair. L'administrateur ne peut pas relire celui d'un collègue, seulement le remplacer.
+- **Les sessions portent le nom de leur auteur**, visible dans la liste des sessions en cours et dans l'historique. Tout le monde voit tout : à plusieurs sur une classe, cacher les sessions des autres compliquerait plus que ça n'aiderait.
+- **Supprimer un compte ne supprime pas ses sessions.** Elles portent les copies des élèves, et l'historique de la classe ne dépend pas de qui a cliqué. Le compte supprimé, lui, ne peut plus se connecter.
+
+L'identifiant de l'administrateur ne peut pas être repris par un compte enseignant, à la casse près : deux comptes indiscernables sur l'écran de connexion seraient un piège.
+
+### Mode examen
+
+Une case à cocher **à côté de l'intitulé**, au moment de créer la session. Décochée, rien ne change : l'élève voit sa note, ses réussites, la valeur de chaque exercice et la correction ligne à ligne, comme depuis toujours. C'est le mode d'entraînement, et il reste le défaut.
+
+Cochée, **l'application ne dit plus à l'élève s'il a juste.** Ce qui change pour lui — les deux dernières lignes touchent au barème, et sont expliquées juste après :
+
+| | Entraînement | Mode examen |
+| --- | --- | --- |
+| Verdict après validation | « Exact. Motif validé. » / « Ce n'est pas la bonne réponse. » | « Réponse enregistrée. » |
+| Note en cours, bandeau du bas | `12,50 / 20` | *rien* |
+| Compteur du bandeau supérieur | `3 / 8 motifs` **réussis** | `3 / 8` **traités** |
+| Liste des exercices | ✓ vert sur les exercices réussis | ☑ neutre sur les exercices traités |
+| Valeur de l'exercice en cours | « vaut 2,50 pts », « vaut encore… » | *rien* |
+| Diff ligne à ligne | lignes fausses surlignées | sortie affichée sans marques |
+| Cible d'un exercice de prédiction | dévoilée une fois trouvée | jamais dévoilée |
+| Explication d'une question de QCM | montrée une fois la bonne réponse trouvée | jamais montrée |
+| Page de remise | note sur 20 et détail par motif | « copie enregistrée », questions traitées |
+| **Sorties de fenêtre et pénalités** | **affichées** | **affichées** |
+| **Cible d'un motif à reproduire** | **affichée** | **affichée** |
+| Coût d'un essai manqué | ⅓ de la valeur de l'exercice | **aucun** |
+| Ce que retient la note | avoir trouvé, même après coup | **la réponse présente à la remise** |
+
+Deux choses restent donc visibles, et c'est voulu :
+
+- **Les pénalités de sortie de fenêtre.** Elles ont été annoncées avant l'épreuve, sur la page d'identification puis sur l'écran d'entrée ; une sanction annoncée doit se voir au moment où elle tombe. Le popup de rappel et la pastille du bandeau supérieur fonctionnent comme d'habitude.
+- **Le motif à reproduire.** C'est l'énoncé, pas la correction : sans lui l'exercice n'existe pas. L'élève peut comparer sa sortie à la cible de ses propres yeux — ce que l'application ne fait plus pour lui, c'est trancher.
+
+Une **boucle infinie** reste annoncée elle aussi : sans arrêt, il n'y a aucune sortie à afficher, et le silence passerait pour une panne. C'est un fait sur le programme de l'élève, lisible dans le code qu'il a sous les yeux, et non un verdict sur sa réponse.
+
+**Ce n'est pas seulement de l'habillage.** Le serveur ne descend pas l'information : la réponse de `/api/task/<clé>/check` ne contient ni `ok`, ni `diff`, ni `target`, ni `note`, ni `first_time`, ni `stakes` ; `/api/task/<clé>` rend `solved: null` et `answered: true/false`. Un élève qui interroge l'API à la main n'apprend rien de plus que la page. Un test le vérifie **pour les quatre modes d'exercice**, sur une bonne comme sur une mauvaise réponse.
+
+**Côté enseignant, rien n'est caché.** La réussite, les tentatives, les essais manqués et la note remontent comme d'habitude dans le suivi direct, l'export CSV et la clôture — seul le calcul de la note suit le barème d'examen décrit ci-dessous, en direct comme à la clôture. Une pastille **mode examen** signale le régime sur la page de la session, dans la liste des sessions en cours et dans l'historique, et la page de la session rappelle la règle sous la pastille.
+
+#### Le barème en mode examen
+
+**Un essai manqué ne retire aucun point.** La sanction existe pour qu'un élève ne puisse pas essayer les réponses une par une jusqu'à tomber juste — et cela suppose que l'application lui dise *quand* il tombe juste. En examen elle ne le dit plus : la sanction n'a plus de cible, et elle punirait surtout celui qui revient sur sa réponse sans savoir s'il a raison de le faire.
+
+**En échange, la copie est jugée sur la réponse qu'elle porte à la remise**, et non sur le fait d'avoir trouvé une fois. Un exercice réussi puis modifié n'est plus acquis ; un exercice raté puis corrigé l'est. Vider ses menus, ou effacer sa prédiction, retire l'acquis de la même façon : la copie ne porte plus de réponse.
+
+Les deux règles vont **ensemble**, et c'est ce qui rend le mode examen notable. Un essai gratuit *et* une réussite acquise pour toujours se combineraient en une faille : passer en revue les quatre propositions d'un QCM garantirait le point, sans rien comprendre et sans rien payer. Avec la seconde règle, celui qui les essaie toutes laisse dans sa copie la dernière proposition essayée — juste une fois sur quatre, par chance. Un test le vérifie.
+
+En entraînement, rien de tout cela ne change : un exercice trouvé reste trouvé, on peut y revenir pour comprendre sans risque, et les essais manqués coûtent comme avant.
+
+Côté suivi direct, la colonne **Essais manqués** continue de les compter — c'est une information utile sur la façon dont l'élève a cherché — mais la colonne **Points perdus** reste à zéro. Les deux ne se contredisent pas : les essais ont eu lieu, ils n'ont rien coûté.
 
 ### Surveillance de la fenêtre
 
@@ -425,11 +496,14 @@ Un motif à `r` réponses en a `r − 1` de fausses : les avoir toutes essayées
 
 La prédiction n'a pas de réponses énumérables : elle reçoit l'allocation d'un menu à quatre options (`PREDICT_CHOICES`, dans `engine.py`), pour que l'acharnement y coûte comme ailleurs.
 
+Tout ce tableau est celui de l'**entraînement**. En mode examen, `scoring.shares_of()` est appelé avec `count_wrong=False` et la colonne du coût vaut zéro partout : voir **Le barème en mode examen**.
+
 Trois garde-fous accompagnent la règle :
 
 - **L'élève est prévenu avant de jouer**, jamais après. L'écran d'accueil énonce la règle, et chaque motif porte une pastille qui dit ce qu'il vaut encore et ce qu'un essai manqué lui coûtera. Un barème qui sanctionne en silence serait un piège.
 - **Un menu incomplet n'est pas un essai** : la réponse est refusée avant d'être comptée.
 - **Un motif déjà validé ne peut plus rien perdre** : on peut y revenir pour comprendre, sans risque.
+- **En mode examen, la règle ne s'applique pas du tout** : la pastille disparaît, et un essai manqué ne coûte rien. La copie y est jugée sur la réponse qu'elle porte à la remise. Voir **Le barème en mode examen**.
 - **Un QCM ne commente pas les mauvaises réponses.** L'explication n'arrive qu'une fois la bonne trouvée : la livrer plus tôt reviendrait à donner la réponse, et il suffirait de la recocher. Celui qui épuise les quatre propositions finit de toute façon par la lire.
 
 Un motif jamais trouvé ne rapporte rien, quels qu'aient été les essais : la perte s'arrête à zéro et ne mord pas sur les autres motifs.
@@ -438,7 +512,9 @@ Côté enseignant, les essais manqués remontent dans le suivi direct (une tuile
 
 ### Migrations de la base
 
-`init_db()` rejoue `schema.sql` à chaque démarrage, mais `CREATE TABLE IF NOT EXISTS` laisse intactes les tables déjà en place : une base déployée avant l'ajout d'une colonne ne l'aurait jamais. `db.ADDED_COLUMNS` liste les colonnes ajoutées après coup, et `_catch_up()` les pose au démarrage si elles manquent. C'est idempotent, et les copies d'avant ne sont pas sanctionnées rétroactivement : `wrong_attempts` y vaut zéro.
+`init_db()` rejoue `schema.sql` à chaque démarrage, mais `CREATE TABLE IF NOT EXISTS` laisse intactes les tables déjà en place : une base déployée avant l'ajout d'une colonne ne l'aurait jamais. `db.ADDED_COLUMNS` liste les colonnes ajoutées après coup, et `_catch_up()` les pose au démarrage si elles manquent. C'est idempotent, et les copies d'avant ne sont pas sanctionnées rétroactivement : `wrong_attempts` y vaut zéro, `session.exam_mode` vaut zéro — une session d'avant ne bascule pas en examen par surprise — et `session.created_by` reste vide.
+
+Les **tables** nouvelles, elles, n'ont besoin de rien : `CREATE TABLE IF NOT EXISTS` les crée au démarrage suivant. C'est ainsi que `teacher` est arrivée sur les bases déjà déployées.
 
 ### Routes
 
@@ -448,8 +524,11 @@ Côté enseignant, les essais manqués remontent dans le suivi direct (une tuile
 | `/s/<code>` | public | **Lien à transmettre** : le code y est déjà, l'élève ne saisit que son identité |
 | `/exercice` | étudiant | L'épreuve |
 | `/termine` | étudiant | Copie remise et détail de la note |
-| `/admin/login` | public | Connexion enseignant |
+| `/admin/login` | public | Connexion — administrateur ou compte enseignant |
 | `/admin/` | enseignant | Créer une session, lister celles en cours |
+| `/admin/comptes` | **administrateur** | Créer et lister les comptes enseignants |
+| `/admin/comptes/<id>/password` | **administrateur** | Remplacer un mot de passe (POST) |
+| `/admin/comptes/<id>/delete` | **administrateur** | Supprimer un compte (POST) |
 | `/admin/sessions/<id>` | enseignant | Lancer, suivre en direct, terminer |
 | `/admin/api/patterns/<clé>` | enseignant | Les attendus d'un exercice, pour sa fiche |
 | `/admin/qcm` | enseignant | Importer un classeur Excel (POST) |
@@ -467,7 +546,8 @@ outils/logo.py          Régénère les déclinaisons du logo
 atelier/
   __init__.py           Fabrique d'application et configuration
   db.py                 Connexion SQLite, une par requête
-  schema.sql            Schéma (session, student, task, incident, qcm_*)
+  schema.sql            Schéma (teacher, session, student, task, incident, qcm_*)
+  accounts.py           Comptes : l'administrateur, et les profils qu'il cree
   engine.py             Socle du moteur : structures, fabriques, correction
   exercises.py          Catalogue : chapitres, modules, registre
   qcm.py                Chapitre QCM : import Excel, modèle, rechargement
