@@ -4,7 +4,10 @@
 (function () {
   "use strict";
 
-  var POLL_MS = 3000;
+  // Un seul enseignant regarde cette page, mais chaque tour relit
+  // toutes les copies : cinq secondes suffisent a un suivi « direct »,
+  // et un onglet passe au second plan n'a plus rien a rafraichir.
+  var POLL_MS = 5000;
   var STALE_MS = 30000;   // au-dela, l'étudiant est considere inactif
 
   var stamp = document.getElementById("live-stamp");
@@ -191,5 +194,12 @@
   }
 
   tick();
-  setInterval(tick, POLL_MS);
+  setInterval(function () {
+    if (document.hidden) return;
+    tick();
+  }, POLL_MS);
+  // Au retour sur l'onglet, on ne fait pas attendre l'enseignant.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) tick();
+  });
 })();

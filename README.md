@@ -587,6 +587,7 @@ flask_app.py            Point d'entrée WSGI
 design/                 Sources graphiques, exclues du déploiement
 outils/logo.py          Régénère les déclinaisons du logo
 outils/verif_linux.py   Confronte les sorties du chapitre Linux au vrai shell
+outils/diag_base.py     Mode de journalisation et disque de la base déployée
 atelier/
   __init__.py           Fabrique d'application et configuration
   db.py                 Connexion SQLite, une par requête
@@ -613,7 +614,7 @@ atelier/
     js/exercise.js      Page d'exercice
     js/admin_compose.js Composition d'une session : plis et sélections
     js/admin_preview.js Fiche d'un exercice, côté enseignant
-    js/admin_live.js    Suivi direct (interrogation toutes les 3 s)
+    js/admin_live.js    Suivi direct (interrogation toutes les 5 s)
 test_atelier.py         Tests de bout en bout
 .env                    Genere par le deploiement, jamais versionne
 ```
@@ -685,7 +686,35 @@ Les appels passent donc par un helper qui lit ce délai dans la réponse, attend
 
 ### Pourquoi une interrogation périodique et pas de WebSocket
 
-PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi direct interroge donc `/admin/api/sessions/<id>/live` toutes les 3 secondes. La charge reste faible : une requête par enseignant connecté, pas par étudiant.
+PythonAnywhere n'expose pas de WebSocket sur les comptes gratuits. Le suivi direct interroge donc `/admin/api/sessions/<id>/live` toutes les 5 secondes, et se met en pause quand l'onglet passe au second plan. La charge reste faible : une requête par enseignant connecté, pas par étudiant.
+
+### Le budget de requêtes d'une classe
+
+C'est l'élève, et non l'enseignant, qui fait le trafic. Chaque copie ouverte sonde le serveur en boucle, et l'hébergement gratuit ne donne **qu'un seul worker** — qui traite une requête à la fois. Le disque, lui, est monté par le réseau : une écriture SQLite y prend un verrou exclusif et coûte cent fois ce qu'elle coûte sur un disque local.
+
+La page d'épreuve a donc **un seul sondage**, toutes les 30 secondes. Il porte à lui seul les trois besoins : dire à l'enseignant que la copie est vivante, rafraîchir le bandeau d'avancement, et annoncer la clôture de la session.
+
+| | Avant | Après |
+| --- | --- | --- |
+| Sondages par élève | 2 (10 s et 15 s) | 1 (30 s) |
+| Requêtes/min, 30 élèves | 320 | 72 |
+| Écritures/min, 30 élèves | 180 | ~30 |
+
+Trois économies, au-delà de la fusion des sondages :
+
+- **`last_seen_at` n'est pas réécrit à chaque passage.** Le filtre est dans le `UPDATE` lui-même : quand l'activité date de moins de 45 secondes, aucune ligne ne correspond, SQLite ne salit aucune page et n'a rien à confirmer sur le disque. L'enseignant lit cette colonne à la minute près, elle n'a pas besoin de plus.
+- **La vérification du catalogue quitte le chemin chaud.** `qcm.sync()` lit une empreinte de la base à chaque requête, pour qu'un import fait dans un processus soit vu par les autres. Les pages de l'enseignant la lisent toujours — un import doit s'y voir aussitôt, et elles sont rares. Le flot des sondages élève s'en tient à une vérification par demi-minute.
+- **`/api/me` ne lit plus deux fois les mêmes tâches.**
+
+Un tour de sondage tient maintenant en **cinq ordres SQL, dont aucune écriture** tant que l'activité est fraîche. `ChargeTest` fige ce budget : c'est un chiffre qui se dégrade sans bruit si personne ne le surveille.
+
+### Vérifier la base en production
+
+```bash
+python3 outils/diag_base.py
+```
+
+Où vit la base, sous quel mode de journalisation, et sur quel type de disque. La question qui compte : `schema.sql` demande `journal_mode = WAL`, et `init_db()` rejoue ce fichier **à chaque démarrage de processus**. Or WAL exige de la mémoire partagée entre les processus qui ouvrent la base, ce qu'un disque monté par le réseau ne fournit pas — SQLite ne le supporte pas, et des utilisateurs de PythonAnywhere y ont perdu des bases. L'outil n'ouvre la base qu'en lecture : il ne peut pas changer le mode qu'il mesure.
 
 ### Développement local
 

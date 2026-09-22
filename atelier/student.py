@@ -9,7 +9,7 @@ from flask import (Blueprint, abort, jsonify, redirect, render_template,
 
 from . import exercises as ex
 from . import scoring
-from .db import execute, now, query
+from .db import ago, execute, now, query
 
 bp = Blueprint("student", __name__)
 
@@ -48,9 +48,26 @@ def tasks_of(student_id):
     )
 
 
+# Age au-dela duquel la derniere activite merite d'etre reecrite. Le
+# sondage de l'eleve passe toutes les 30 secondes, et une ecriture SQLite
+# prend un verrou exclusif : a trente copies, reecrire a chaque passage
+# ferait une ecriture par seconde pour une colonne dont l'enseignant lit
+# l'age a la minute pres.
+SEEN_INTERVAL = 45
+
+
 def touch(student_id):
-    execute("UPDATE student SET last_seen_at = ? WHERE id = ?",
-            (now(), student_id))
+    """Marque la copie comme active, sans reecrire a chaque requete.
+
+    Le filtre est dans le UPDATE : quand la derniere activite est encore
+    fraiche, aucune ligne ne correspond, et SQLite n'ecrit rien — pas de
+    verrou, pas de journal. Comparer les horodatages comme du texte est
+    correct : ils sont tous au meme format ISO, tous en UTC.
+    """
+    execute("""UPDATE student SET last_seen_at = ?
+                WHERE id = ?
+                  AND (last_seen_at IS NULL OR last_seen_at < ?)""",
+            (now(), student_id, ago(SEEN_INTERVAL)))
 
 
 def in_exam(student):
@@ -77,9 +94,13 @@ def forget_success(task_id):
             (task_id,))
 
 
-def progress_of(student):
-    """Avancement de la copie, tel que l'eleve a le droit de le voir."""
-    rows = tasks_of(student["id"])
+def progress_of(student, rows=None):
+    """Avancement de la copie, tel que l'eleve a le droit de le voir.
+
+    `rows` evite une seconde lecture des taches a l'appelant qui les a
+    deja sous la main.
+    """
+    rows = tasks_of(student["id"]) if rows is None else rows
     solved = sum(1 for t in rows if t["solved"])
     common = {
         "exam": in_exam(student),
@@ -322,7 +343,7 @@ def api_me():
         "session_status": student["session_status"],
         "exam": exam,
         "finished": bool(student["finished_at"]),
-        "progress": progress_of(student),
+        "progress": progress_of(student, rows),
         # Les intitulés de module ne servent que si la session en croise
         # plusieurs ; sinon ils n'ajouteraient que du bruit.
         "modules": [m.title for m in
@@ -631,9 +652,17 @@ def api_incident_return(incident_id):
 
 @bp.post("/api/heartbeat")
 def api_heartbeat():
+    """Le seul sondage de la page d'epreuve.
+
+    Il porte trois roles a lui seul : dire a l'enseignant que la copie
+    est vivante, rendre l'avancement affiche dans le bandeau, et
+    annoncer la cloture de la session. Les separer coutait deux requetes
+    et deux ecritures par eleve et par tour, pour la meme information.
+    """
     student = require_student()
     touch(student["id"])
-    return jsonify(progress_of(student))
+    return jsonify(dict(progress_of(student),
+                        session_status=student["session_status"]))
 
 
 @bp.post("/api/finish")

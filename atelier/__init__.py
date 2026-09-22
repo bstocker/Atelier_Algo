@@ -95,7 +95,11 @@ def create_app(config=None):
     @app.before_request
     def load_imported_qcm():
         from flask import request
-        if request.endpoint != "static":
-            qcm.sync()
+        if request.endpoint == "static":
+            return
+        # Les pages de l'enseignant voient un import a la requete
+        # suivante. Les sondages de l'epreuve, eux, se contentent d'une
+        # verification par intervalle : ils sont cent fois plus nombreux.
+        qcm.sync(throttle=request.blueprint == "student")
 
     return app

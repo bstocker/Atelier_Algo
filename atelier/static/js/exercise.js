@@ -677,22 +677,25 @@
     });
   });
 
-  // Battement de coeur : alimente la colonne « dernière activité » cote
-  // enseignant et detecte la cloture de la session.
+  // Battement de coeur, seul sondage de la page : il alimente la colonne
+  // « dernière activité » cote enseignant, rafraichit l'avancement, et
+  // detecte la cloture de la session.
+  //
+  // Il tournait a 10 secondes, double d'un second sondage a 15 secondes
+  // qui ne lisait qu'un etat de session. Trente eleves faisaient ainsi
+  // trois cents requetes par minute, dont cent quatre-vingts ecritures
+  // en base : sur l'hebergement, ou le disque est monte par le reseau,
+  // c'est la que partait la latence. Une seule requete par demi-minute
+  // porte la meme information.
   setInterval(function () {
     if (el.app.hidden) return;
     postJSON("/api/heartbeat").then(function (p) {
-      showProgress(p);
-    }).catch(function () {});
-  }, 10000);
-
-  setInterval(function () {
-    if (el.app.hidden) return;
-    api("/api/me").then(function (me) {
-      if (me.session_status === "closed") {
+      if (p.session_status === "closed") {
         if (window.Proctor) window.Proctor.stop();
         window.location.href = "/terminé";
+        return;
       }
+      showProgress(p);
     }).catch(function () {});
-  }, 15000);
+  }, 30000);
 })();

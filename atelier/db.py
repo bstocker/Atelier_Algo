@@ -2,7 +2,7 @@
 
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import current_app, g
 
@@ -10,6 +10,17 @@ from flask import current_app, g
 def now():
     """Horodatage UTC ISO 8601, a la seconde."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def ago(seconds):
+    """Le meme horodatage, mais d'il y a `seconds` secondes.
+
+    Sert aux ecritures conditionnelles : comparer deux horodatages comme
+    du texte est correct tant qu'ils sortent tous les deux d'ici — meme
+    format, meme fuseau.
+    """
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)) \
+        .replace(microsecond=0).isoformat()
 
 
 def get_db():

@@ -6,13 +6,15 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import tempfile
 import unittest
 import urllib.parse
 
 from markupsafe import escape
 
-from atelier import create_app, db, load_env_file, exercises as ex, qcm, scoring
+from atelier import (create_app, db, load_env_file, exercises as ex, qcm,
+                     scoring, student)
 
 
 def tirages(pattern):
@@ -2093,6 +2095,139 @@ class LinuxTest(unittest.TestCase):
             client.get("/api/task/lx_chercher").get_json()["action"],
             "Exécuter la commande")
 
+
+class ChargeTest(unittest.TestCase):
+    """Ce que chaque requête coûte à la base.
+
+    L'hébergement monte le disque par le réseau : une écriture SQLite y
+    prend un verrou exclusif et coûte cent fois ce qu'elle coûte ici.
+    Avec trente copies qui sondent en boucle, le nombre de requêtes SQL
+    par sondage n'est pas un détail d'implémentation, c'est un budget.
+    """
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.app = create_app({
+            "TESTING": True,
+            "DATABASE": self.path,
+            "SECRET_KEY": "test",
+            "ADMIN_USER": "prof",
+            "ADMIN_PASSWORD": "secret",
+        })
+        self.admin = self.app.test_client()
+        self.admin.post("/admin/login",
+                        data={"username": "prof", "password": "secret"})
+        resp = self.admin.post("/admin/sessions", data={
+            "title": "TP", "patterns": ["ligne", "lx_chercher"]})
+        self.session_id = int(
+            resp.headers["Location"].rstrip("/").split("/")[-1])
+        self.admin.post("/admin/sessions/%d/open" % self.session_id)
+        page = self.admin.get("/admin/sessions/%d" % self.session_id) \
+                         .get_data(as_text=True)
+        code = page.split('class="joincode mono">')[1].split("<")[0].strip()
+        self.client = self.app.test_client()
+        self.client.post("/join", data={"first_name": "Ada",
+                                        "last_name": "Lovelace",
+                                        "code": code})
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    def sql(self, appel):
+        """Les ordres SQL qu'une requête HTTP envoie à la base."""
+        vus = []
+        vrai_connect = sqlite3.connect
+
+        def espion(*args, **kwargs):
+            conn = vrai_connect(*args, **kwargs)
+            conn.set_trace_callback(
+                lambda ordre: vus.append(" ".join(ordre.split())))
+            return conn
+
+        sqlite3.connect = espion
+        try:
+            appel()
+        finally:
+            sqlite3.connect = vrai_connect
+        return vus
+
+    @staticmethod
+    def ecritures(ordres):
+        return [o for o in ordres
+                if o.split(" ")[0].upper() in ("INSERT", "UPDATE", "DELETE")]
+
+    def last_seen(self):
+        with self.app.app_context():
+            return db.query("SELECT last_seen_at FROM student WHERE id = 1",
+                            one=True)["last_seen_at"]
+
+    def set_last_seen(self, secondes):
+        with self.app.app_context():
+            db.execute("UPDATE student SET last_seen_at = ? WHERE id = 1",
+                       (db.ago(secondes),))
+
+    def test_a_recent_activity_is_not_rewritten(self):
+        """Réécrire la même seconde à chaque tour ne dit rien de plus.
+
+        L'ordre part quand même, mais il ne trouve aucune ligne : SQLite
+        ne salit aucune page, ne prend pas le verrou d'écriture et n'a
+        rien à confirmer sur le disque. C'est là qu'est l'économie.
+        """
+        self.set_last_seen(10)          # bien en deçà de SEEN_INTERVAL
+        avant = self.last_seen()
+        self.client.post("/api/heartbeat")
+        self.assertEqual(self.last_seen(), avant)
+
+    def test_an_old_activity_is_written_again(self):
+        self.set_last_seen(student.SEEN_INTERVAL + 60)
+        avant = self.last_seen()
+        self.client.post("/api/heartbeat")
+        self.assertGreater(self.last_seen(), avant)
+
+    def test_the_heartbeat_says_when_the_session_is_over(self):
+        """Un seul sondage sur la page : il doit porter la clôture aussi."""
+        vivant = self.client.post("/api/heartbeat").get_json()
+        self.assertEqual(vivant["session_status"], "open")
+        self.admin.post("/admin/sessions/%d/close" % self.session_id)
+        fini = self.client.post("/api/heartbeat").get_json()
+        self.assertEqual(fini["session_status"], "closed")
+
+    def test_the_progress_reads_the_tasks_only_once(self):
+        lectures = [o for o in self.sql(lambda: self.client.get("/api/me"))
+                    if "FROM task WHERE student_id" in o]
+        self.assertEqual(len(lectures), 1, lectures)
+
+    def test_the_student_flood_does_not_recheck_the_catalogue(self):
+        """L'empreinte du catalogue ne bouge pas pendant une épreuve."""
+        self.client.post("/api/heartbeat")
+        ordres = self.sql(lambda: self.client.post("/api/heartbeat"))
+        self.assertEqual([o for o in ordres if "FROM qcm_module" in o], [])
+
+    def test_the_teacher_pages_still_see_an_import_at_once(self):
+        """Ce que l'espacement ne doit pas coûter : l'import reste immédiat."""
+        self.admin.get("/admin/")
+        ordres = self.sql(lambda: self.admin.get("/admin/"))
+        self.assertTrue([o for o in ordres if "FROM qcm_module" in o], ordres)
+
+    def test_the_budget_of_a_polling_round(self):
+        """Le budget complet d'un tour de sondage, verrouillé par un chiffre.
+
+        Cinq ordres : identifier la copie, et lire ses tâches, autour
+        d'un UPDATE conditionnel qui ne touche aucune ligne tant que
+        l'activité est fraîche. Trente copies sondent toutes les trente
+        secondes : ce nombre est multiplié par soixante chaque minute.
+        """
+        self.set_last_seen(10)
+        ordres = [o for o in self.sql(lambda: self.client.post("/api/heartbeat"))
+                  if not o.startswith("PRAGMA")]
+        self.assertEqual(len(ordres), 5, ordres)
+        self.assertEqual(len([o for o in ordres if "FROM task" in o]), 1)
+        self.assertEqual([o for o in ordres if "FROM qcm_module" in o], [])
 
 class CatalogueTest(unittest.TestCase):
     """Le catalogue doit rester cohérent quand on ajoute des modules."""

@@ -21,6 +21,7 @@ import io
 import json
 import re
 import threading
+import time
 import unicodedata
 
 from . import exercises
@@ -382,21 +383,39 @@ def model_workbook(patterns):
 
 
 _loaded = None          # empreinte du catalogue actuellement charge
+_checked_at = 0.0       # derniere lecture de l'empreinte, horloge monotone
 _lock = threading.Lock()
 
+# Delai entre deux verifications, sur les requetes qui s'en contentent.
+SYNC_INTERVAL = 30.0
 
-def sync(force=False):
+
+def sync(force=False, throttle=False):
     """Recharge les modules importes si la base a bouge.
 
     Appelee a chaque requete : plusieurs processus servent l'application,
     et un import fait dans l'un doit etre vu par les autres. Le cas courant
     ne coute qu'une requete et une comparaison de triplet.
 
+    `throttle` espace ces verifications. Les pages de l'enseignant ne le
+    demandent pas : un import doit s'y voir a la requete suivante, et
+    elles sont peu nombreuses. Le flot des sondages eleve, lui, paie une
+    requete SQL pour une empreinte qui ne bouge presque jamais — a trente
+    copies cela fait des centaines de lectures par minute pour rien. Un
+    import y apparait donc avec une demi-minute de retard au pire, ce qui
+    ne change rien : on n'importe pas un QCM pendant une epreuve.
+
     Le verrou protege la fenetre pendant laquelle les anciens motifs sont
     sortis du registre et les nouveaux pas encore entres.
     """
-    global _loaded
+    global _loaded, _checked_at
+    # Un processus qui n'a encore rien charge verifie toujours, quoi qu'on
+    # lui demande : sans cela il servirait un catalogue vide.
+    if (throttle and _loaded is not None
+            and time.monotonic() - _checked_at < SYNC_INTERVAL):
+        return
     stamp = signature()
+    _checked_at = time.monotonic()
     if stamp == _loaded and not force:
         return
     with _lock:
