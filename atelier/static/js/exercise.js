@@ -662,7 +662,7 @@
       return api("/api/me");
     }).then(function (me) {
       if (me.finished || me.session_status !== "open") {
-        window.location.href = "/terminé";
+        window.location.href = "/termine";
         return;
       }
       tasks = me.tasks;
@@ -692,7 +692,7 @@
     postJSON("/api/heartbeat").then(function (p) {
       if (p.session_status === "closed") {
         if (window.Proctor) window.Proctor.stop();
-        window.location.href = "/terminé";
+        window.location.href = "/termine";
         return;
       }
       showProgress(p);

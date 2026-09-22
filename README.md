@@ -6,12 +6,12 @@
 🎯 PROJET ARCHITECTURE SI — Atelier « boucles sans IA »
 ------------------------------------------------------------------------------------------------------
 
-Cet atelier construit, déploie et exploite une application web qui enseigne les **boucles imbriquées en C** à des débutants, conçue pour que le copier-coller dans une IA n'apporte aucun avantage.
+Cet atelier construit, déploie et exploite une application web qui enseigne les **bases de la programmation et du système** à des débutants — le langage C, la ligne de commande Linux, et des QCM — conçue pour que le copier-coller dans une IA n'apporte aucun avantage.
 
-Les exercices classiques (« écris une pyramide en étoiles ») sont résolus en une seconde par un assistant IA : l'élève obtient le code sans construire le raisonnement. La réponse retenue ici est de **déplacer la tâche** — au lieu de *produire* du code, l'élève *lit et comprend l'exécution*. Quatre leviers rendent la triche sans intérêt :
+Les exercices classiques (« écris une pyramide en étoiles », « quelle commande liste les fichiers cachés ? ») sont résolus en une seconde par un assistant IA : l'élève obtient la réponse sans construire le raisonnement. La réponse retenue ici est de **déplacer la tâche** — au lieu de *produire* du code, l'élève *lit et comprend l'exécution*. Quatre leviers rendent la triche sans intérêt :
 
-- **Compléter des conditions de boucle** plutôt qu'écrire tout le code : un menu déroulant ne se colle pas dans une IA.
-- **Tirer la taille au hasard**, pour que la cible diffère d'un poste à l'autre.
+- **Compléter dans des menus** plutôt qu'écrire : un menu déroulant ne se colle pas dans une IA.
+- **Tirer les paramètres au hasard**, pour que la cible diffère d'un poste à l'autre.
 - **Corriger côté serveur** : le navigateur ne reçoit jamais la réponse attendue.
 - **Surveiller la fenêtre** : sortir de l'épreuve pour aller consulter un assistant coûte des points.
 
@@ -171,7 +171,7 @@ Trois chapitres aujourd'hui : **Langage C** et **Ligne de commande Linux**, tous
 | Les conditions | ●○○○ | 8 | Comparaisons, `&&` / `\|\|`, `if … else if`, `switch` |
 | Les chaînes de caractères | ●●○○ | 8 | Tableau de `char`, `'\0'`, indices, comparaison de caractères |
 | Les tableaux | ●●○○ | 8 | Parcours indexé, accumulateurs, extremums, deux boucles |
-| Les arguments | ●●○○ | 7 | `argc`, `argv`, `atoi`, et le piège de `argv[0]` |
+| Les arguments de la ligne de commande | ●●○○ | 7 | `argc`, `argv`, `atoi`, et le piège de `argv[0]` |
 | Itératif et récursif | ●●●○ | 6 | Cas d'arrêt, pas, débordement de pile |
 
 **28 exercices de Linux** répartis en quatre modules :
@@ -181,7 +181,7 @@ Trois chapitres aujourd'hui : **Langage C** et **Ligne de commande Linux**, tous
 | Fichiers et dossiers | ●○○○ | 8 | `pwd`, `cd`, `ls -a`, `wc`, `head` / `tail`, `cp` / `mv`, `>` et `>>` |
 | Filtrer, trier, compter | ●●○○ | 7 | `grep`, `cut`, `sort`, `uniq`, et le tube qui les enchaîne |
 | Droits et recherche | ●●●○ | 6 | `ls -l`, `chmod` octal et symbolique, `find`, `-delete` |
-| Le shell | ●●●● | 7 | `$1` et `$#`, `&&` / `\|\|`, `for`, les étoiles, `sed`, `awk` |
+| Le shell : variables et enchaînements | ●●●● | 7 | `$1` et `$#`, `&&` / `\|\|`, `for`, les étoiles, `sed`, `awk` |
 
 **83 exercices de C et de Linux**, plus les 15 questions du QCM livré.
 
@@ -389,7 +389,7 @@ Si le navigateur refuse le plein écran, la surveillance se rabat sur la détect
 
 ### Les exercices d'entrée
 
-Quatre exercices sur la boucle simple, avant toute imbrication.
+Quatre exercices du module « Les boucles », sur la boucle simple, avant toute imbrication.
 
 | Exercice | Ce qu'il fait travailler | Le trou |
 | --- | --- | --- |
@@ -434,12 +434,17 @@ Les espaces de début comptent, ceux de fin sont ignorés, et les lignes vides f
 
 Un code fautif, la sortie qu'il **devrait** produire, celle qu'il produit **réellement**, et quatre causes possibles. L'écart est sous les yeux : ce qui fait l'exercice, c'est de l'expliquer.
 
+Le catalogue en compte quatorze, dix en C et quatre en Linux. Quelques-uns, pour donner le ton :
+
 | Exercice | Le défaut *(réservé à l'enseignant)* | Ce qu'on observe |
 | --- | --- | --- |
 | Bug : le triangle rectangle | `j < i` au lieu de `j <= i` | Première ligne vide, une étoile manque partout |
 | Bug : la ligne d'étoiles | `j > n` au lieu de `j < n` | Rien du tout : le test est faux dès le premier passage |
 | Bug : les n lignes | Accolades manquantes : une seule instruction dans la boucle | Toutes les étoiles sur une seule ligne |
 | Bug : la somme de 1 à n | `total = 0` **dans** la boucle | Le résultat vaut le dernier terme, pas la somme |
+| Bug : la liste écrite dans un fichier | `>` au lieu de `>>` | Une seule ligne : le fichier est vidé à chaque tour |
+| Bug : la liste sans doublon | `uniq` sans `sort` | Les doublons non consécutifs restent |
+| Bug : compter les lignes du rapport | `$fichier` sans guillemets | Deux erreurs, et un `0 total` |
 
 **Le nom de l'exercice désigne le but du programme, jamais son défaut.** Un titre comme « la borne exclue » donnerait la réponse avant lecture. Le nom du défaut part dans `teacher_note`, que seul le formulaire de composition affiche — un test vérifie qu'il ne descend jamais dans la réponse envoyée à l'élève.
 
@@ -475,8 +480,10 @@ Le cœur est un moteur piloté par des données : chaque exercice est un objet d
 - `name`, `brief`, `why` : libellés affichés à l'élève.
 - `teacher_note` : mention réservée au formulaire de composition.
 - `lesson` : rappel de cours facultatif, affiché au-dessus de l'énoncé.
-- `dim` / `value` : taille tirable (`n`, `h`) ou valeur saisie (`v`).
-- `blanks` : les menus à compléter ; chaque option porte son texte C et la fonction Python équivalente.
+- `level` : la difficulté, de 1 à 4, et `mode` : compléter, prédire, diagnostiquer, ou QCM.
+- `dim` / `value` / `dims` : paramètre tirable (`n`, `h`), valeur saisie (`v`), ou plusieurs tirages croisés.
+- `derive` : paramètres déduits des tirages — une phrase choisie dans une liste, les valeurs d'un tableau, le contenu d'un fichier.
+- `blanks` : les menus à compléter ; chaque option porte son texte — code C ou fragment de commande — et la fonction Python équivalente.
 - `tpl` : le gabarit de code, mélange de texte et de marqueurs de trou.
 - `rows(params, get)` : produit chaque ligne à partir des fonctions choisies ; sert à la fois à la cible (choix de référence) et à la sortie de l'élève.
 - `broken(params)` : en mode diagnostic, la sortie que produit réellement le code fautif.
@@ -488,11 +495,11 @@ Cycle d'un exercice :
 
 ```mermaid
 flowchart LR
-  A[Lire la cible] --> B[Choisir les conditions]
-  B --> C[Compiler et executer]
+  A[Lire la cible] --> B[Choisir dans les menus]
+  B --> C[Compiler, ou executer]
   C --> D{Conforme ?}
   D -->|non| B
-  D -->|oui| E[Motif suivant]
+  D -->|oui| E[Exercice suivant]
 ```
 
 La comparaison se fait ligne à ligne, après suppression des espaces de fin, et surligne les écarts.
@@ -632,7 +639,7 @@ La parade est générale : **afficher le déroulé, pas seulement le résultat**
 ### Spécifications techniques
 
 - **Stack :** Python, Flask, SQLite. Côté navigateur, HTML, CSS et JavaScript vanilla — aucun framework, aucune étape de build.
-- **Dépendances :** Flask uniquement (`requirements.txt`). La seule ressource externe chargée par le navigateur est Google Fonts.
+- **Dépendances :** Flask, et openpyxl pour la lecture des classeurs de QCM (`requirements.txt`). L'application démarre même si openpyxl manque : seuls l'import et le modèle répondent alors par un message. La seule ressource externe chargée par le navigateur est Google Fonts.
 - **Thèmes :** clair et sombre, suivant le réglage système, avec bascule manuelle (utile au vidéoprojecteur).
 - **Persistance :** SQLite. Les copies, les sorties de fenêtre et les notes sont conservées — c'est ce qui rend l'historique possible. Côté navigateur, seul le thème est stocké (`localStorage`, encadré d'un `try/catch`).
 - **Accessibilité :** focus clavier visible, `prefers-reduced-motion` respecté, statuts jamais portés par la couleur seule (toujours doublés d'un glyphe et d'une infobulle).
@@ -722,7 +729,7 @@ Où vit la base, sous quel mode de journalisation, et sur quel type de disque. L
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 62 tests
+python3 -m unittest test_atelier -v     # 167 tests
 ```
 
 ---------------------------------------------------
@@ -735,12 +742,13 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] Aucune sélection incorrecte ne reproduit la cible (vérifié pour chaque distracteur, à chaque taille).
 - [x] Une sélection incorrecte est signalée ligne par ligne, sans faux positif.
 - [x] La régénération aléatoire donne une cible différente sans casser la correction.
+- [x] Pour un exercice de Linux, la sortie simulée est celle du vrai shell, au caractère près, pour chaque tirage et chaque option (`outils/verif_linux.py`).
 - [x] La réponse attendue ne transite jamais jusqu'au navigateur.
 - [x] Une sortie de fenêtre compte pour une seule pénalité, quel que soit le nombre d'événements émis par le navigateur.
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (62 tests).
+La suite `test_atelier.py` couvre ces points (167 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -750,6 +758,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 | Priorité | Évolution | Détail | Effort |
 | --- | --- | --- | --- |
+| Haute | Quitter SQLite | Le disque de l'hébergeur est monté par le réseau : verrous et mode WAL y sont mal supportés. MySQL demande un plan payant | M |
 | Haute | Module « Les pointeurs » | Adresse, déréférencement, passage par adresse | M |
 | Haute | Module « Les fonctions » | Paramètres, valeur de retour, portée des variables | M |
 | Moyenne | Plus de prédictions | `predict_from` sur les autres exercices, cinq lignes chacune | S |
@@ -759,12 +768,13 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 | Moyenne | Trace des boucles imbriquées | Étendre l'exécution pas à pas aux motifs à deux boucles | M |
 | Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |
 | Moyenne | Version Python d'initiation | Boucles simples : `for`, `while`, accumulateur, compteur | M |
+| Moyenne | Module « Réseau et processus » | Sous le chapitre Linux : `ps`, `kill`, `ss`, `curl`, les tubes nommés | M |
 | Basse | Boucles imbriquées libres | Motifs personnalisés pour élèves avancés | M |
 | Basse | Internationalisation | Textes séparés pour d'autres langues | M |
 
 Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le moteur est déjà séparé du contenu.
 
-*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas.
+*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas, comptes enseignants, mode examen, chapitre QCM avec import Excel, et chapitre « Ligne de commande Linux ».
 
 ---------------------------------------------------
 ⚠️ Contraintes, risques et limites connues
@@ -774,11 +784,11 @@ Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le mote
 
 **Surveillance.** La détection de sortie s'appuie sur des événements du navigateur. Elle décourage la consultation d'un assistant dans un autre onglet ; elle ne protège ni d'un second écran, ni d'un téléphone. Si le navigateur refuse le plein écran, la surveillance se rabat sur le changement d'onglet et l'étudiant en est informé.
 
-**Le moteur ne compile pas réellement le C.** Il simule chaque motif par une fonction Python dédiée. Ajouter un motif exige donc d'écrire sa fonction `rows` en même temps que son gabarit.
+**Le moteur ne compile pas réellement le C, et n'exécute pas les commandes Linux.** Il simule chaque exercice par une fonction Python dédiée. Ajouter un exercice exige donc d'écrire sa fonction `rows` en même temps que son gabarit — et, pour un exercice de Linux, de vérifier que cette fonction dit bien ce que dit l'outil réel. C'est le rôle de `outils/verif_linux.py`, qui rejoue chaque exercice dans un vrai shell.
 
 **Comparaison des sorties.** La pyramide et les motifs à espaces voient leurs espaces de fin supprimés avant comparaison : un écart portant uniquement sur ces espaces ne serait pas signalé.
 
-**Échelle.** SQLite et l'interrogation périodique conviennent à une classe. Au-delà de quelques dizaines d'étudiants simultanés sur un compte PythonAnywhere gratuit, il faudrait revoir l'hébergement.
+**Échelle.** SQLite et l'interrogation périodique conviennent à une classe, à condition de savoir ce qui limite. Ce n'est pas le calcul : mesuré, le trafic de fond d'une classe de trente consomme moins de 1 % d'un worker. Ce sont le **worker unique** du compte gratuit, qui traite une requête à la fois, et les **écritures SQLite** sur un disque monté par le réseau, où chacune prend un verrou exclusif. D'où le sondage unique à 30 secondes et les écritures conditionnelles décrits plus haut. Au-delà, l'étape suivante est un plan payant — pour ses workers **et** son MySQL, jamais pour les workers seuls, qui ne feraient qu'ajouter des processus en concurrence sur le même fichier verrouillé.
 
 --------------------------------------------------------------------
 🧠 Troubleshooting :

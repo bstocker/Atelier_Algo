@@ -735,6 +735,26 @@ class AtelierTest(unittest.TestCase):
             with self.subTest(appel=appel):
                 self.assertFalse([l for l in lignes if appel in l], appel)
 
+    def test_every_address_the_script_jumps_to_exists(self):
+        """Une adresse écrite en dur dans le script doit répondre.
+
+        `/terminé` accentué a longtemps mené à un 404 : la route s'écrit
+        `/termine`. L'élève dont la session était clôturée pendant
+        l'épreuve tombait donc sur une page d'erreur au lieu de sa copie.
+        """
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "atelier", "static", "js", "exercise.js")
+        with open(source, encoding="utf-8") as fh:
+            script = fh.read()
+        adresses = set(re.findall(r'window\.location\.href = "(/[^"]*)"',
+                                  script))
+        self.assertTrue(adresses)
+        _, code = self.make_session(patterns=("ligne",))
+        client, _ = self.join(code)
+        for adresse in sorted(adresses):
+            with self.subTest(adresse=adresse):
+                self.assertNotEqual(client.get(adresse).status_code, 404)
+
     def test_student_receives_the_difficulty_of_each_exercise(self):
         _, code = self.make_session(patterns=("ligne", "losange"))
         client, _ = self.join(code)
