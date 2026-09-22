@@ -2249,6 +2249,78 @@ class ChargeTest(unittest.TestCase):
         self.assertEqual(len([o for o in ordres if "FROM task" in o]), 1)
         self.assertEqual([o for o in ordres if "FROM qcm_module" in o], [])
 
+class JournalTest(unittest.TestCase):
+    """Le mode de journalisation de SQLite, et le disque de l'hébergeur.
+
+    Mesuré sur l'installation en service : `/home` y est monté en `nfs`.
+    Le mode WAL exige de la mémoire partagée entre les processus qui
+    ouvrent la base — SQLite le documente comme inutilisable sur un
+    système de fichiers réseau. Le schéma demandait pourtant WAL, et
+    `init_db()` le reposait à chaque démarrage de processus.
+    """
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    def build(self):
+        return create_app({
+            "TESTING": True, "DATABASE": self.path, "SECRET_KEY": "test",
+            "ADMIN_USER": "prof", "ADMIN_PASSWORD": "secret",
+        })
+
+    def mode(self):
+        conn = sqlite3.connect(self.path)
+        try:
+            return conn.execute("PRAGMA journal_mode").fetchone()[0].lower()
+        finally:
+            conn.close()
+
+    def test_the_schema_never_asks_for_wal(self):
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "atelier", "schema.sql")
+        with open(source, encoding="utf-8") as fh:
+            schema = fh.read()
+        demandes = re.findall(r"(?im)^\s*PRAGMA\s+journal_mode\s*=\s*(\w+)",
+                              schema)
+        self.assertEqual([d.lower() for d in demandes], ["delete"])
+
+    def test_a_fresh_database_is_not_in_wal(self):
+        self.build()
+        self.assertEqual(self.mode(), "delete")
+
+    def test_a_database_left_in_wal_is_converted_without_losing_anything(self):
+        """Le cas réel : une base déjà en service, à faire basculer."""
+        self.build()
+        conn = sqlite3.connect(self.path)
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("INSERT INTO session (code, title, patterns, created_at)"
+                     " VALUES ('ABC123', 'TP du lundi', '[\"ligne\"]', 'hier')")
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.mode(), "wal")
+
+        self.build()                    # le redémarrage rejoue le schéma
+
+        self.assertEqual(self.mode(), "delete")
+        conn = sqlite3.connect(self.path)
+        try:
+            self.assertEqual(
+                conn.execute("SELECT title FROM session").fetchone()[0],
+                "TP du lundi")
+            self.assertEqual(
+                conn.execute("PRAGMA quick_check").fetchone()[0], "ok")
+        finally:
+            conn.close()
+
+
 class CatalogueTest(unittest.TestCase):
     """Le catalogue doit rester cohérent quand on ajoute des modules."""
 

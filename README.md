@@ -715,13 +715,31 @@ Trois économies, au-delà de la fusion des sondages :
 
 Un tour de sondage tient maintenant en **cinq ordres SQL, dont aucune écriture** tant que l'activité est fraîche. `ChargeTest` fige ce budget : c'est un chiffre qui se dégrade sans bruit si personne ne le surveille.
 
+### Le mode de journalisation, et le disque de l'hébergeur
+
+Le schéma a longtemps ouvert sur `PRAGMA journal_mode = WAL`. C'est plus rapide, et c'était une erreur ici.
+
+Le mode WAL exige de la **mémoire partagée** entre les processus qui ouvrent la base — un fichier `-shm` projeté en mémoire. SQLite le documente comme inutilisable sur un système de fichiers réseau. Or le diagnostic sur l'installation en service est sans appel :
+
+```
+Base        : /home/…/mysite/instance/atelier.sqlite
+Disque      : nfs  ← monté par le réseau
+Journal     : wal
+```
+
+`/home` est monté en `nfs`, et `init_db()` reposait ce mode **à chaque démarrage de processus**. La base n'était pas corrompue, mais elle tenait par chance : ce sont les copies, les notes et l'historique d'une classe entière qui étaient en jeu.
+
+Le schéma demande donc `journal_mode = DELETE`. Le `PRAGMA` s'applique au **fichier**, pas à la connexion : le redémarrage qui suit un déploiement fait donc basculer une base déjà en service, sans rien lui faire perdre. La bascule échoue cependant **sans bruit** si un autre processus tient la base ouverte — SQLite rend alors le mode courant au lieu de lever une erreur. `init_db()` relit donc le mode obtenu et écrit un avertissement dans le journal de l'application s'il est resté `wal`.
+
+`JournalTest` verrouille les trois points : le schéma ne demande jamais WAL, une base neuve n'y est pas, et une base laissée en WAL en ressort au démarrage suivant avec ses données intactes.
+
 ### Vérifier la base en production
 
 ```bash
 python3 outils/diag_base.py
 ```
 
-Où vit la base, sous quel mode de journalisation, et sur quel type de disque. La question qui compte : `schema.sql` demande `journal_mode = WAL`, et `init_db()` rejoue ce fichier **à chaque démarrage de processus**. Or WAL exige de la mémoire partagée entre les processus qui ouvrent la base, ce qu'un disque monté par le réseau ne fournit pas — SQLite ne le supporte pas, et des utilisateurs de PythonAnywhere y ont perdu des bases. L'outil n'ouvre la base qu'en lecture : il ne peut pas changer le mode qu'il mesure.
+Où vit la base, sous quel mode de journalisation, sur quel type de disque, et ce que dit `quick_check`. L'outil n'ouvre la base **qu'en lecture** : il ne peut pas changer le mode qu'il mesure — ce que ferait, lui, un simple démarrage de l'application. À relancer après chaque déploiement qui touche au schéma.
 
 ### Développement local
 
@@ -729,7 +747,7 @@ Où vit la base, sous quel mode de journalisation, et sur quel type de disque. L
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 167 tests
+python3 -m unittest test_atelier -v     # 170 tests
 ```
 
 ---------------------------------------------------
@@ -748,7 +766,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (167 tests).
+La suite `test_atelier.py` couvre ces points (170 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -758,7 +776,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 | Priorité | Évolution | Détail | Effort |
 | --- | --- | --- | --- |
-| Haute | Quitter SQLite | Le disque de l'hébergeur est monté par le réseau : verrous et mode WAL y sont mal supportés. MySQL demande un plan payant | M |
+| Haute | Quitter SQLite | Le disque de l'hébergeur est monté par le réseau : les verrous d'écriture y coûtent cher, et le mode WAL y est inutilisable. MySQL demande un plan payant | M |
 | Haute | Module « Les pointeurs » | Adresse, déréférencement, passage par adresse | M |
 | Haute | Module « Les fonctions » | Paramètres, valeur de retour, portée des variables | M |
 | Moyenne | Plus de prédictions | `predict_from` sur les autres exercices, cinq lignes chacune | S |

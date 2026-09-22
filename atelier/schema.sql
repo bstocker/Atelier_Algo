@@ -1,4 +1,10 @@
-PRAGMA journal_mode = WAL;
+-- Journal classique, et non WAL. Le mode WAL est plus rapide, mais il
+-- exige de la memoire partagee entre les processus qui ouvrent la base :
+-- SQLite le documente comme inutilisable sur un systeme de fichiers
+-- reseau, et l'hebergement monte precisement /home par le reseau. Le
+-- gain ne vaut pas le risque de corrompre des copies d'eleves.
+-- `outils/diag_base.py` dit sous quel mode tourne la base deployee.
+PRAGMA journal_mode = DELETE;
 
 -- Comptes enseignants crees par l'administrateur. Le compte administrateur
 -- lui-meme n'est pas ici : il vient des variables d'environnement, et il est
