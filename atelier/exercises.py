@@ -21,7 +21,8 @@ from .engine import (  # noqa: F401  — réexportés pour le reste de l'appli
     register, render_code, shuffled_blanks, specs, substitute, target_rows,
     unregister,
 )
-from .modules import (arguments, boucles, chaines, conditions, qcm_docker,
+from .modules import (arguments, boucles, chaines, conditions, linux_droits,
+                      linux_fichiers, linux_filtres, linux_shell, qcm_docker,
                       recursif, tableaux)
 
 # Chapitres livrés avec l'application. Le chapitre QCM reçoit en plus, à
@@ -36,6 +37,14 @@ BASE_CHAPTERS = (
                  arguments.MODULE),
     ),
     Chapter(
+        key="linux",
+        title="Ligne de commande Linux",
+        summary="Les commandes du terminal, module par module.",
+        modules=(linux_fichiers.MODULE, linux_filtres.MODULE,
+                 linux_droits.MODULE, linux_shell.MODULE),
+        action="Exécuter la commande",
+    ),
+    Chapter(
         key="qcm",
         title="QCM",
         summary="Des questionnaires à choix unique : une question, quatre "
@@ -47,7 +56,8 @@ BASE_CHAPTERS = (
 QCM_CHAPTER_KEY = "qcm"
 
 for _module in (boucles, conditions, chaines, tableaux, recursif,
-                arguments, qcm_docker):
+                arguments, linux_fichiers, linux_filtres, linux_droits,
+                linux_shell, qcm_docker):
     register(_module.PATTERNS)
 
 # Modules importés actuellement chargés : clé -> Module. Reconstruits par
@@ -69,7 +79,8 @@ def _rebuild():
     global CHAPTERS, MODULES, CHAPTER_OF, MODULE_BY_KEY, ALL_KEYS, _MODULE_OF
     CHAPTERS = tuple(
         Chapter(key=c.key, title=c.title, summary=c.summary,
-                modules=c.modules + tuple(_IMPORTED.values()))
+                modules=c.modules + tuple(_IMPORTED.values()),
+                action=c.action)
         if c.key == QCM_CHAPTER_KEY else c
         for c in BASE_CHAPTERS
     )

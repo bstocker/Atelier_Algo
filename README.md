@@ -118,7 +118,7 @@ Trois conséquences à connaître :
 2. *(facultatif)* Si vous êtes plusieurs à utiliser l'installation : onglet **Comptes**, créez un compte par collègue. Format détaillé plus bas.
 3. *(facultatif)* Pour ajouter vos propres QCM : carte **Importer un QCM**, bouton **Télécharger le modèle**, remplissez-le, redéposez-le. Le sous-module apparaît aussitôt sous le chapitre **QCM**. Format détaillé plus bas.
 4. Créez une session : donnez-lui un intitulé et cochez les exercices. **Le formulaire arrive entièrement décoché** : une épreuve se compose, elle ne se subit pas. Les exercices sont **groupés par chapitre, module puis niveau**, avec un bouton pour cocher un chapitre, un module ou un niveau entier. Un compteur indique combien de points vaut chaque exercice retenu. Les exercices de diagnostic affichent ici le nom de leur défaut, que l'élève ne voit pas.
-   Chapitres et modules **se replient** : le catalogue se parcourt sans dérouler cinquante-cinq intitulés, et chaque en-tête replié affiche le compte de ses exercices cochés. Les plis suivent l'enseignant d'une visite à l'autre.
+   Chapitres et modules **se replient** : le catalogue se parcourt sans dérouler une centaine d'intitulés, et chaque en-tête replié affiche le compte de ses exercices cochés. Les plis suivent l'enseignant d'une visite à l'autre.
    Un clic sur le **titre d'un exercice** ouvre sa fiche : voir plus bas.
    À côté de l'intitulé, la case **Mode examen** décide de ce que l'élève verra de ses résultats : voir plus bas.
 5. Cliquez sur **Lancer la session**.
@@ -155,13 +155,13 @@ Difficulté : Moyenne (~180 minutes)
 
 ### Ce que fait l'application
 
-Une épreuve surveillée sur les **bases du langage C**. L'étudiant ne produit pas de code : il complète les conditions de boucle dans des menus, puis « compile » pour comparer sa sortie au motif cible.
+Une épreuve surveillée sur les **bases de la programmation et du système**. L'étudiant ne produit ni code ni commande : il complète des menus, puis lance l'exécution pour comparer sa sortie au motif cible.
 
 Le catalogue a trois étages : **chapitre → module → exercice**.
 
 Un **chapitre** réunit des modules d'un même domaine. Un **module** porte un titre, un niveau indicatif et un résumé. Chaque **exercice** garde son propre niveau, plus fin, et son mode.
 
-Deux chapitres aujourd'hui : **Langage C**, décrit en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
+Trois chapitres aujourd'hui : **Langage C** et **Ligne de commande Linux**, tous deux décrits en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
 
 **55 exercices de C** répartis en six modules :
 
@@ -174,7 +174,18 @@ Deux chapitres aujourd'hui : **Langage C**, décrit en Python dans `atelier/modu
 | Les arguments | ●●○○ | 7 | `argc`, `argv`, `atoi`, et le piège de `argv[0]` |
 | Itératif et récursif | ●●●○ | 6 | Cas d'arrêt, pas, débordement de pile |
 
-**Ajouter un module de C** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre. **Ajouter un QCM** ne demande pas de code du tout : un classeur Excel déposé depuis la console suffit.
+**28 exercices de Linux** répartis en quatre modules :
+
+| Module | Niveau | Exercices | Ce qu'il fait travailler |
+| --- | --- | --- | --- |
+| Fichiers et dossiers | ●○○○ | 8 | `pwd`, `cd`, `ls -a`, `wc`, `head` / `tail`, `cp` / `mv`, `>` et `>>` |
+| Filtrer, trier, compter | ●●○○ | 7 | `grep`, `cut`, `sort`, `uniq`, et le tube qui les enchaîne |
+| Droits et recherche | ●●●○ | 6 | `ls -l`, `chmod` octal et symbolique, `find`, `-delete` |
+| Le shell | ●●●● | 7 | `$1` et `$#`, `&&` / `\|\|`, `for`, les étoiles, `sed`, `awk` |
+
+**83 exercices de C et de Linux**, plus les 15 questions du QCM livré.
+
+**Ajouter un module** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre. **Ajouter un QCM** ne demande pas de code du tout : un classeur Excel déposé depuis la console suffit.
 
 ```python
 # atelier/modules/pointeurs.py
@@ -183,15 +194,17 @@ MODULE = Module(key="pointeurs", title="Les pointeurs", level=4,
                 summary="…", keys=tuple(p.key for p in PATTERNS))
 ```
 
+Un chapitre nomme aussi le geste qui valide une réponse : on **compile** un programme, on **exécute** une commande. C'est le champ `action` du `Chapter`, et le bouton de l'élève le reprend tel quel.
+
 Quatre tests veillent sur la cohérence : chaque exercice appartient à exactement un module, chaque module à un chapitre, toutes les clés citées existent, et chaque module porte un titre, un résumé et un niveau connu.
 
 Trois modes coexistent :
 
 | Mode | Ce que fait l'élève | Levier anti-IA |
 | --- | --- | --- |
-| **Compléter** (12) | Choisit les conditions de boucle dans des menus | Un menu déroulant ne se colle pas dans une IA |
-| **Prédire** (2) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
-| **Trouver le bug** (4) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
+| **Compléter** (58) | Choisit dans des menus le morceau qui manque au programme ou à la commande | Un menu déroulant ne se colle pas dans une IA |
+| **Prédire** (11) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
+| **Trouver le bug** (14) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
 | **QCM** | Choisit l'une des quatre propositions | Propositions mélangées par copie, et un essai manqué coûte |
 
 Dans les quatre modes, un essai manqué entame la valeur du motif.
@@ -199,6 +212,36 @@ Dans les quatre modes, un essai manqué entame la valeur du motif.
 **La taille de chaque motif est tirée au hasard par étudiant** : deux voisins n'ont pas la même cible. La correction est faite **côté serveur** — le navigateur ne reçoit jamais la réponse attendue.
 
 **Un essai manqué coûte des points sur le motif en cours** : essayer les réponses une par une jusqu'à tomber juste ramène le motif à zéro. Voir **Le coût d'un essai manqué**.
+
+### Le chapitre Linux
+
+Les mêmes motifs que pour le C, appliqués au terminal : des menus, un tirage par élève, une correction côté serveur, et les trois modes — compléter, prédire, trouver le bug. Ce qui change est ce que l'élève lit.
+
+Un exercice de C montre un programme ; un exercice de Linux montre une **session de terminal** — les lignes qui commencent par `$` sont les commandes tapées, les autres ce qu'elles ont affiché. La dernière commande porte le trou, et la cible est ce qu'elle imprime.
+
+```
+$ cat acces.log
+lyon
+paris
+lyon
+…
+$ sort acces.log | uniq -c | sort -rn | head -n 3
+```
+
+**Les sorties sont celles des vrais outils GNU**, au caractère près : les sept colonnes du compte de `uniq -c`, la ligne de `ls -l`, le `0 total` que `wc` ajoute quand aucun de ses arguments n'existe, le message exact d'une permission refusée. Un élève qui rejoue l'exercice dans son terminal doit retrouver le même texte — sans quoi l'exercice enseigne une chose fausse. Chaque sortie simulée est donc confrontée au shell, tirage par tirage et option par option, par `outils/verif_linux.py` :
+
+```
+python3 outils/verif_linux.py
+```
+
+Il monte le décor dans un dossier temporaire, lance la commande de chaque option et compare. Il reste hors de la suite de tests, qui ne peut pas supposer un shell GNU sous la main ; les valeurs qu'il a validées sont recopiées dans `LinuxTest`, qui tourne partout.
+
+Deux contraintes propres au chapitre, et leur raison :
+
+- **Une option ne peut pas suivre le tirage.** Un menu est un texte figé : s'il propose `sort liste.txt`, le fichier doit porter ce nom pour tout le monde. Ces exercices-là gardent donc un nom de fichier fixe et font varier son **contenu**. Un test le vérifie.
+- **L'ordre de `find` et celui de `ls` dépendent du disque et de la locale.** Les commandes de recherche finissent donc par `| sort`, et les jeux de noms sont choisis pour que l'ordre soit le même avec ou sans le point de tête d'un fichier caché.
+
+La difficulté monte d'un module à l'autre : se repérer et lister (niveaux 1 à 3), filtrer et trier (2 à 4), droits et recherche (3 à 4), puis le shell comme langage — variables, codes de retour, boucles, `sed` et `awk` (3 à 4).
 
 ### Le chapitre QCM
 
@@ -543,6 +586,7 @@ Les **tables** nouvelles, elles, n'ont besoin de rien : `CREATE TABLE IF NOT EXI
 flask_app.py            Point d'entrée WSGI
 design/                 Sources graphiques, exclues du déploiement
 outils/logo.py          Régénère les déclinaisons du logo
+outils/verif_linux.py   Confronte les sorties du chapitre Linux au vrai shell
 atelier/
   __init__.py           Fabrique d'application et configuration
   db.py                 Connexion SQLite, une par requête
@@ -554,6 +598,9 @@ atelier/
   modules/              Un fichier par module d'exercices
     boucles.py  conditions.py  chaines.py
     tableaux.py  recursif.py   arguments.py
+    linux_commun.py     Ce que les modules Linux partagent : session, listings
+    linux_fichiers.py   linux_filtres.py
+    linux_droits.py     linux_shell.py
     qcm_docker.py       Le QCM livré avec l'application
   scoring.py            Barème : valeur d'un motif, essais manqués, pénalités
   student.py            Parcours étudiant et API
@@ -678,7 +725,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 | Haute | Module « Les fonctions » | Paramètres, valeur de retour, portée des variables | M |
 | Moyenne | Plus de prédictions | `predict_from` sur les autres exercices, cinq lignes chacune | S |
 | Moyenne | Plus de bugs | Débordement d'indice, `scanf` sans `&`, comparaison de chaînes avec `==` | S |
-| Moyenne | Un chapitre par langage | La structure le permet déjà : Python, Java… | M |
+| Moyenne | Un chapitre par langage | Fait pour Linux ; reste Python, Java… | M |
 | Moyenne | Mode Parsons | Réordonner des lignes mélangées : impossible à « générer » | M |
 | Moyenne | Trace des boucles imbriquées | Étendre l'exécution pas à pas aux motifs à deux boucles | M |
 | Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |

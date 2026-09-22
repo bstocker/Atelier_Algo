@@ -4,6 +4,7 @@ import io
 import itertools
 import json
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -1901,6 +1902,196 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(scoring.attempt_cost(8, 4), 2.5 / 3)
         self.assertEqual(scoring.exercise_value(8), 2.5)
         self.assertEqual(scoring.exercise_value(0), 0.0)
+
+
+class LinuxTest(unittest.TestCase):
+    """Le chapitre Linux : des commandes, et leur vraie sortie.
+
+    Les sorties attendues ci-dessous ont été relevées sur un vrai shell
+    GNU, puis recopiées ici. Un exercice qui simule mal ce que fait une
+    commande enseigne une chose fausse, et l'élève le découvrira dans
+    son terminal.
+    """
+
+    LINUX_KEYS = ("lx_caches", "lx_parent", "lx_compter", "lx_fin_journal",
+                  "lx_ranger", "lx_ajouter", "lx_chercher", "lx_colonne",
+                  "lx_trier", "lx_dedoublonner", "lx_palmares",
+                  "lx_chmod_octal", "lx_chmod_symbolique", "lx_trouver",
+                  "lx_menage", "lx_args", "lx_enchainer", "lx_remplacer",
+                  "lx_total", "lx_pour_chaque")
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.app = create_app({
+            "TESTING": True,
+            "DATABASE": self.path,
+            "SECRET_KEY": "test",
+            "ADMIN_USER": "prof",
+            "ADMIN_PASSWORD": "secret",
+        })
+        self.admin = self.app.test_client()
+        self.admin.post("/admin/login",
+                        data={"username": "prof", "password": "secret"})
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    def chapitre(self):
+        for chapter in ex.CHAPTERS:
+            if chapter.key == "linux":
+                return chapter
+        raise AssertionError("pas de chapitre Linux")
+
+    def test_the_chapter_holds_four_modules(self):
+        chapitre = self.chapitre()
+        self.assertEqual([m.key for m in chapitre.modules],
+                         ["linux_fichiers", "linux_filtres", "linux_droits",
+                          "linux_shell"])
+        for module in chapitre.modules:
+            for key in module.keys:
+                self.assertIn(key, ex.PATTERNS, key)
+
+    def test_the_chapter_covers_every_difficulty(self):
+        """Des exercices faciles, moyens et difficiles, pas un seul palier."""
+        niveaux = {ex.PATTERNS[k].level
+                   for m in self.chapitre().modules for k in m.keys}
+        self.assertEqual(niveaux, set(ex.LEVELS))
+
+    def test_the_chapter_uses_the_three_modes(self):
+        modes = {ex.PATTERNS[k].mode
+                 for m in self.chapitre().modules for k in m.keys}
+        self.assertEqual(modes, {"complete", "debug", "predict"})
+
+    def test_every_exercise_shows_a_session_or_a_script(self):
+        """Un bloc commence par une invite, ou c'est un script à lire."""
+        for module in self.chapitre().modules:
+            for key in module.keys:
+                with self.subTest(exercice=key):
+                    tpl = ex.PATTERNS[key].tpl
+                    self.assertTrue(tpl.startswith("$ ")
+                                    or tpl.startswith("#!/bin/bash"), tpl[:20])
+
+    def test_every_session_explains_how_to_read_itself(self):
+        """L'élève qui ne voit qu'un exercice doit savoir lire le bloc."""
+        for module in self.chapitre().modules:
+            for key in module.keys:
+                pattern = ex.PATTERNS[key]
+                if pattern.mode != "complete":
+                    continue        # diagnostic et prédiction : un script,
+                                    # ou un rappel qui leur est propre
+                with self.subTest(exercice=key):
+                    self.assertIn("session de terminal", pattern.lesson[0])
+
+    def test_listing_the_hidden_entries(self):
+        self.assertEqual(
+            ex.target_rows("lx_caches", {"g": 0, **ex.PATTERNS["lx_caches"]
+                                         .derive({"g": 0})}),
+            [".", "..", ".bashrc", ".config", "notes.txt", "rapport.pdf"])
+
+    def test_counting_the_lines_of_a_file(self):
+        params = dict(g=0, **ex.PATTERNS["lx_compter"].derive({"g": 0}))
+        self.assertEqual(ex.target_rows("lx_compter", params),
+                         ["4 courses.txt"])
+
+    def test_moving_a_file_into_another_directory(self):
+        params = dict(g=0, n=1,
+                      **ex.PATTERNS["lx_ranger"].derive({"g": 0, "n": 1}))
+        self.assertEqual(ex.target_rows("lx_ranger", params),
+                         [".:", "agenda.txt", "sauvegarde", "",
+                          "sauvegarde:", "rapport.txt"])
+
+    def test_the_ranking_pipeline_counts_and_sorts(self):
+        """sort | uniq -c | sort -rn | head : comptes alignés sur 7 colonnes."""
+        params = dict(g=0, **ex.PATTERNS["lx_palmares"].derive({"g": 0}))
+        self.assertEqual(ex.target_rows("lx_palmares", params),
+                         ["      4 lyon", "      3 paris", "      2 nice"])
+
+    def test_a_symbolic_chmod_only_touches_what_it_names(self):
+        tirage = {"g": 0, "d": 0}
+        params = dict(tirage,
+                      **ex.PATTERNS["lx_chmod_symbolique"].derive(tirage))
+        self.assertEqual(
+            ex.target_rows("lx_chmod_symbolique", params),
+            ["-rwxrw-r-- 1 ada ada 128 Sep 22 12:28 sauvegarde.sh"])
+
+    def test_find_descends_where_a_star_does_not(self):
+        params = dict(g=0, **ex.PATTERNS["lx_trouver"].derive({"g": 0}))
+        self.assertEqual(ex.target_rows("lx_trouver", params),
+                         ["./erreurs.log", "./src/debug.log"])
+
+    def test_an_unquoted_variable_is_split_on_its_spaces(self):
+        tirage = {"g": 0, "n": 2}
+        params = dict(tirage,
+                      **ex.PATTERNS["lx_bug_guillemets"].derive(tirage))
+        self.assertEqual(ex.target_rows("lx_bug_guillemets", params),
+                         ["2 rapport final.txt"])
+        self.assertEqual(ex.broken_rows("lx_bug_guillemets", params),
+                         ["wc: rapport: No such file or directory",
+                          "wc: final.txt: No such file or directory",
+                          "0 total"])
+
+    def test_a_menu_never_names_a_file_the_draw_can_rename(self):
+        """Une option est un texte figé : elle ne suit pas le tirage.
+
+        Si un menu propose `sort liste.txt`, le fichier doit s'appeler
+        ainsi dans **tous** les tirages — ou dans aucun, pour un fichier
+        qu'on cite justement parce qu'il n'existe pas. Un nom qui change
+        d'un élève à l'autre donnerait une commande qui ne parle pas du
+        fichier montré.
+        """
+        nom_de_fichier = re.compile(r"\b[a-z0-9_]+\.[a-z]+\b")
+        for key in self.LINUX_KEYS:
+            pattern = ex.PATTERNS[key]
+            cites = {mot
+                     for _label, options in pattern.blanks.values()
+                     for opt in options
+                     for mot in nom_de_fichier.findall(opt.c)}
+            for nom in cites:
+                presences = {nom in ex.render_code(key, params,
+                                                   dict(pattern.ref))
+                             for params in tirages(pattern)}
+                with self.subTest(exercice=key, fichier=nom):
+                    self.assertEqual(len(presences), 1, nom)
+
+    def test_a_linux_exercise_is_solved_like_any_other(self):
+        resp = self.admin.post("/admin/sessions", data={
+            "title": "TP Linux", "patterns": ["lx_chercher", "carre"]})
+        session_id = int(resp.headers["Location"].rstrip("/").split("/")[-1])
+        self.admin.post("/admin/sessions/%d/open" % session_id)
+        page = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        code = page.split('class="joincode mono">')[1].split("<")[0].strip()
+        client = self.app.test_client()
+        client.post("/join", data={"first_name": "Ada",
+                                   "last_name": "Lovelace", "code": code})
+        task = client.get("/api/task/lx_chercher").get_json()
+        self.assertEqual(task["module"], "Filtrer, trier, compter")
+        verdict = client.post("/api/task/lx_chercher/check",
+                              json={"selection": {"cmd": "a"}}).get_json()
+        self.assertTrue(verdict["ok"])
+
+    def test_the_run_button_speaks_the_language_of_its_chapter(self):
+        """On compile un programme, on exécute une commande."""
+        resp = self.admin.post("/admin/sessions", data={
+            "title": "TP mixte", "patterns": ["lx_chercher", "carre"]})
+        session_id = int(resp.headers["Location"].rstrip("/").split("/")[-1])
+        self.admin.post("/admin/sessions/%d/open" % session_id)
+        page = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        code = page.split('class="joincode mono">')[1].split("<")[0].strip()
+        client = self.app.test_client()
+        client.post("/join", data={"first_name": "Ada",
+                                   "last_name": "Lovelace", "code": code})
+        self.assertEqual(client.get("/api/task/carre").get_json()["action"],
+                         "Compiler et exécuter")
+        self.assertEqual(
+            client.get("/api/task/lx_chercher").get_json()["action"],
+            "Exécuter la commande")
 
 
 class CatalogueTest(unittest.TestCase):

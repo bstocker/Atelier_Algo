@@ -34,11 +34,16 @@ class Chapter:
 
     « Langage C » réunit les boucles, les conditions, les tableaux… Un
     futur chapitre pourrait réunir des modules d'un autre langage.
+
+    `action` est le libellé du bouton qui lance la vérification. On ne
+    compile pas une ligne de commande : chaque chapitre nomme le geste
+    dans ses propres termes.
     """
     key: str
     title: str
     summary: str
     modules: tuple
+    action: str = "Compiler et exécuter"
 
 
 @dataclass(frozen=True)

@@ -369,6 +369,7 @@ def api_task(key):
         "level": pattern.level,
         "level_name": ex.LEVELS[pattern.level],
         "module": ex.module_of(key).title,
+        "action": ex.chapter_of(key).action,
         "params": params,
         "lesson": list(pattern.lesson),
         "exam": exam,

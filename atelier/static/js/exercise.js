@@ -393,17 +393,19 @@
 
     el.codeTitle.textContent = (predict || debug) ? "Code à lire"
                                                   : "Code à compléter";
+    // Le libellé du geste vient du chapitre : on compile un programme,
+    // on exécute une commande.
     el.check.textContent = predict ? "Vérifier ma prédiction"
                          : debug   ? "Valider mon diagnostic"
                          : qcm     ? "Valider ma réponse"
-                                   : "Compiler et exécuter";
+                                   : (data.action || "Compiler et exécuter");
     el.targetTitle.textContent = debug ? "Ce que le code devrait produire"
                                        : "Motif à reproduire";
     el.outputTitle.textContent = debug ? "Ce qu'il produit réellement"
                                        : "Votre sortie";
     el.output.textContent = predict
       ? "Écrivez votre prédiction puis vérifiez."
-      : "Complétez les menus puis compilez.";
+      : "Complétez les menus puis lancez l'exécution.";
 
     if (predict) {
       el.predictInput.value = data.answer || "";
