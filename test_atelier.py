@@ -1583,6 +1583,19 @@ class AccountsTest(unittest.TestCase):
         self.assertIn("c.durand",
                       self.admin.get("/admin/").get_data(as_text=True))
 
+    def test_a_cookie_without_an_account_name_logs_in_again(self):
+        """Un cookie d'avant les comptes créerait des sessions sans auteur."""
+        ancien = self.app.test_client()
+        with ancien.session_transaction() as cookie:
+            cookie["is_admin"] = True
+        res = ancien.post("/admin/sessions",
+                          data={"title": "Anonyme", "patterns": ["carre"]})
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/admin/login", res.headers["Location"])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM session")[0][0], 0)
+        self.assertEqual(ancien.get("/admin/api/sessions/1/live").status_code,
+                         401)
+
     # -- ce qu'un profil ne peut pas faire ---------------------------------
 
     def test_a_profile_cannot_touch_the_accounts(self):

@@ -8,86 +8,6 @@
 {% if error %}<p class="alert">{{ error }}</p>{% endif %}
 
 <div class="card">
-  <div class="panel-head">
-    <div>
-      <h1>Importer un QCM</h1>
-      <p class="muted">Un classeur Excel devient un sous-module du chapitre
-         <strong>QCM</strong>, utilisable aussitôt dans une session.</p>
-    </div>
-    <a class="ghost" href="{{ url_for('admin.qcm_model') }}">Télécharger le modèle</a>
-  </div>
-
-  <form method="post" action="{{ url_for('admin.import_qcm') }}"
-        enctype="multipart/form-data" class="stack qcm-import">
-    <label>Intitulé du QCM
-      <input name="title" maxlength="120" placeholder="Docker : les bases">
-    </label>
-    <label>Résumé <span class="hint">facultatif, affiché sous le titre</span>
-      <input name="summary" maxlength="300"
-             placeholder="Images et conteneurs, Dockerfile, ports et volumes.">
-    </label>
-    <label>Classeur
-      <input type="file" name="workbook" accept=".xlsx" required>
-    </label>
-    <button type="submit" class="primary">Importer</button>
-  </form>
-
-  <details class="qcm-format">
-    <summary>Structure attendue du fichier</summary>
-    <p class="hint">Première feuille du classeur. La première ligne porte les
-       intitulés, chaque ligne suivante une question. Les intitulés sont
-       reconnus sans tenir compte de la casse ni des accents ; l'ordre des
-       colonnes est libre.</p>
-    <div class="tablewrap">
-      <table class="table">
-        <thead><tr><th>Colonne</th><th>Obligatoire</th><th>Contenu</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">Question</td><td>oui</td><td>L'énoncé</td></tr>
-          <tr><td class="mono">Réponse A</td><td>oui</td><td>Première proposition</td></tr>
-          <tr><td class="mono">Réponse B</td><td>oui</td><td>Deuxième proposition</td></tr>
-          <tr><td class="mono">Réponse C</td><td>oui</td><td>Troisième proposition</td></tr>
-          <tr><td class="mono">Réponse D</td><td>oui</td><td>Quatrième proposition</td></tr>
-          <tr><td class="mono">Bonne réponse</td><td>oui</td>
-              <td><span class="mono">A</span>, <span class="mono">B</span>,
-                  <span class="mono">C</span> ou <span class="mono">D</span>
-                  (ou 1 à 4)</td></tr>
-          <tr><td class="mono">Explication</td><td>non</td>
-              <td>Montrée après la réponse, juste ou fausse</td></tr>
-          <tr><td class="mono">Niveau</td><td>non</td>
-              <td>1 à 4, défaut 2 — sert au repérage de l'enseignant</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="hint">Quatre propositions par question, toutes différentes, une
-       seule juste. Les lignes vides sont ignorées. Le niveau du module est la
-       moyenne de celui de ses questions.</p>
-  </details>
-
-  {% if imported %}
-  <h2>QCM importés</h2>
-  <table class="table">
-    <thead><tr><th>Intitulé</th><th>Questions</th><th>Fichier</th><th></th></tr></thead>
-    <tbody>
-      {% for q in imported %}
-      <tr>
-        <td>{{ q.title }}</td>
-        <td class="num">{{ q.questions }}</td>
-        <td class="muted">{{ q.source or '—' }}</td>
-        <td>
-          <form method="post" action="{{ url_for('admin.delete_qcm', key=q.key) }}"
-                class="inline"
-                onsubmit="return confirm('Supprimer « {{ q.title }} » et ses {{ q.questions }} questions ?');">
-            <button type="submit" class="ghost danger-text">Supprimer</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</div>
-
-<div class="card">
   <h1>Nouvelle session</h1>
   <form method="post" action="{{ url_for('admin.create_session') }}" class="stack">
     <div class="form-row">
@@ -212,6 +132,85 @@
   </table>
   {% else %}
   <p class="muted">Aucune session en cours.</p>
+  {% endif %}
+</div>
+<div class="card">
+  <div class="panel-head">
+    <div>
+      <h1>Importer un QCM</h1>
+      <p class="muted">Un classeur Excel devient un sous-module du chapitre
+         <strong>QCM</strong>, utilisable aussitôt dans une session.</p>
+    </div>
+    <a class="ghost" href="{{ url_for('admin.qcm_model') }}">Télécharger le modèle</a>
+  </div>
+
+  <form method="post" action="{{ url_for('admin.import_qcm') }}"
+        enctype="multipart/form-data" class="stack qcm-import">
+    <label>Intitulé du QCM
+      <input name="title" maxlength="120" placeholder="Docker : les bases">
+    </label>
+    <label>Résumé <span class="hint">facultatif, affiché sous le titre</span>
+      <input name="summary" maxlength="300"
+             placeholder="Images et conteneurs, Dockerfile, ports et volumes.">
+    </label>
+    <label>Classeur
+      <input type="file" name="workbook" accept=".xlsx" required>
+    </label>
+    <button type="submit" class="primary">Importer</button>
+  </form>
+
+  <details class="qcm-format">
+    <summary>Structure attendue du fichier</summary>
+    <p class="hint">Première feuille du classeur. La première ligne porte les
+       intitulés, chaque ligne suivante une question. Les intitulés sont
+       reconnus sans tenir compte de la casse ni des accents ; l'ordre des
+       colonnes est libre.</p>
+    <div class="tablewrap">
+      <table class="table">
+        <thead><tr><th>Colonne</th><th>Obligatoire</th><th>Contenu</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Question</td><td>oui</td><td>L'énoncé</td></tr>
+          <tr><td class="mono">Réponse A</td><td>oui</td><td>Première proposition</td></tr>
+          <tr><td class="mono">Réponse B</td><td>oui</td><td>Deuxième proposition</td></tr>
+          <tr><td class="mono">Réponse C</td><td>oui</td><td>Troisième proposition</td></tr>
+          <tr><td class="mono">Réponse D</td><td>oui</td><td>Quatrième proposition</td></tr>
+          <tr><td class="mono">Bonne réponse</td><td>oui</td>
+              <td><span class="mono">A</span>, <span class="mono">B</span>,
+                  <span class="mono">C</span> ou <span class="mono">D</span>
+                  (ou 1 à 4)</td></tr>
+          <tr><td class="mono">Explication</td><td>non</td>
+              <td>Montrée après la réponse, juste ou fausse</td></tr>
+          <tr><td class="mono">Niveau</td><td>non</td>
+              <td>1 à 4, défaut 2 — sert au repérage de l'enseignant</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">Quatre propositions par question, toutes différentes, une
+       seule juste. Les lignes vides sont ignorées. Le niveau du module est la
+       moyenne de celui de ses questions.</p>
+  </details>
+
+  {% if imported %}
+  <h2>QCM importés</h2>
+  <table class="table">
+    <thead><tr><th>Intitulé</th><th>Questions</th><th>Fichier</th><th></th></tr></thead>
+    <tbody>
+      {% for q in imported %}
+      <tr>
+        <td>{{ q.title }}</td>
+        <td class="num">{{ q.questions }}</td>
+        <td class="muted">{{ q.source or '—' }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.delete_qcm', key=q.key) }}"
+                class="inline"
+                onsubmit="return confirm('Supprimer « {{ q.title }} » et ses {{ q.questions }} questions ?');">
+            <button type="submit" class="ghost danger-text">Supprimer</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   {% endif %}
 </div>
 {% include "_exercise_sheet.html" %}

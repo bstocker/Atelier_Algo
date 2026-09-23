@@ -32,7 +32,10 @@ def require_admin(view):
     """Espace enseignant : administrateur ou profil créé par lui."""
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
-        if not session.get("is_admin"):
+        # Un cookie d'avant les comptes porte le droit, pas le nom : ses
+        # sessions seraient inscrites sans auteur. On redemande le mot de
+        # passe, une fois.
+        if not session.get("is_admin") or not who():
             if request.path.startswith("/admin/api/"):
                 abort(401, description="Session enseignant expirée.")
             return redirect(url_for("admin.login", next=request.path))
