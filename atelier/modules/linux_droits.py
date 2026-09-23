@@ -8,7 +8,7 @@ arborescence sans savoir où il est.
 from fnmatch import fnmatch
 
 from ..engine import Module, Pattern, _opts, debug_pattern, predict_from
-from .linux_commun import lecon
+from .linux_commun import lecon, predire
 
 # Fichiers et leur fiche d'état civil. Le jour est à deux chiffres : `ls`
 # l'aligne sur deux colonnes, et un jour seul y prendrait une espace de
@@ -345,7 +345,9 @@ PREDIRE_CHMOD = predict_from(
     name="Prédire : les droits après un chmod",
     why="Traduire trois chiffres en neuf lettres, puis n'en changer qu'une.",
     level=4,
+    output_format=("-XXXXXXXXX 1 <propriétaire> <groupe> <taille> <date> <nom>",),
     dims=(("g", 0, 3), ("d", 0, 3)),
+    lesson=predire(CHMOD_SYMBOLIQUE),
 )
 
 

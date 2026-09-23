@@ -110,7 +110,12 @@
       var seen = s.last_seen ? Date.parse(s.last_seen) : 0;
       if (!s.finished && now - seen > STALE_MS) row.className = "stale";
 
-      var nom = td(s.name);
+      // Le nom est dans un span : une ligne inactive s'estompe sans que la
+      // cellule figée devienne transparente (cf. style.css).
+      var nom = document.createElement("td");
+      var label = document.createElement("span");
+      label.textContent = s.name;
+      nom.appendChild(label);
       // La couleur alerte au premier coup d'œil ; le compte, juste à côté,
       // porte l'information pour ne jamais dépendre de la seule teinte.
       if (s.exits >= 2) {

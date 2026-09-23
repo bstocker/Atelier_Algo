@@ -319,6 +319,11 @@ PREDIRE_TABLE = predict_from(
     name="Prédire : la table récursive",
     why="Suivre une récursion à deux paramètres jusqu'à son cas d'arrêt.",
     level=3,
+    output_format=(
+        "V x M = R",
+        "V x M = R",
+        "…",
+    ),
 )
 
 

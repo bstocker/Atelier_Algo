@@ -534,6 +534,13 @@ PREDIRE_EXTREMES = predict_from(
     name="Prédire : le plus grand et le plus petit",
     why="Parcourir le tableau de tête, en retenant deux références à la fois.",
     level=3,
+    output_format=(
+        "MAX MIN",
+        "MAX MIN",
+        "…",
+        "max MAX",
+        "min MIN",
+    ),
     dims=(("n", 5, 6), ("g", 0, 3)),
 )
 

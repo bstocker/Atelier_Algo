@@ -93,6 +93,7 @@ class Pattern:
     derive: Callable = None               # params tires -> params supplementaires
     trace: Callable = None                # (params, get, text) -> list[dict]
     lesson: tuple = ()                    # points a retenir, affiches en tete
+    output_format: tuple = ()             # prediction : forme de la sortie
     level: int = 2                        # cle de LEVELS
     teacher_note: str = ""                # visible du seul enseignant
     mode: str = "complete"                # complete | predict | debug
@@ -259,8 +260,8 @@ def debug_pattern(key, name, but, defaut, tpl, attendu, obtenu,
 # Mode « predire la sortie »
 # --------------------------------------------------------------------------
 
-def predict_from(base, key, name, why, level, dim=None, dims=None,
-                 lesson=None):
+def predict_from(base, key, name, why, level, output_format, dim=None,
+                 dims=None, lesson=None):
     """Derive un exercice de prediction a partir d'un motif existant.
 
     Le code est livre complet, trous deja remplis par la selection de
@@ -270,6 +271,11 @@ def predict_from(base, key, name, why, level, dim=None, dims=None,
 
     `lesson` remplace le rappel par defaut, qui parle de boucles : une
     fiche de calcul ne se deroule pas tour par tour.
+
+    `output_format` montre la forme de la sortie sans ses valeurs
+    (`Hôtes : XXXX`) : l'eleve sait quoi ecrire, pas ce qu'il vaut. Il
+    est obligatoire, faute de quoi une bonne reponse mal mise en forme
+    serait refusee sans que l'eleve comprenne pourquoi.
     """
     tpl = base.tpl
     for blank_id, (_label, options) in base.blanks.items():
@@ -294,6 +300,7 @@ def predict_from(base, key, name, why, level, dim=None, dims=None,
             "Les espaces comptent. Une ligne décalée d'un espace est fausse.",
             "Les espaces en fin de ligne, eux, sont ignorés.",
         ),
+        output_format=tuple(output_format),
         tpl=tpl,
         blanks={},
         ref={},

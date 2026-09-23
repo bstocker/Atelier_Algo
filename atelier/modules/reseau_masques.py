@@ -449,6 +449,7 @@ PREDIRE_HOTES = predict_from(
     name="Prédire : le nombre de machines",
     why="Une puissance de deux, moins les deux adresses réservées.",
     level=2,
+    output_format=("Hôtes : XXXX",),
     lesson=PREDIRE,
 )
 
@@ -458,6 +459,10 @@ PREDIRE_MASQUE = predict_from(
     name="Prédire : réseau et diffusion d'un /20",
     why="L'octet coupé se calcule en binaire, les autres se recopient.",
     level=4,
+    output_format=(
+        "Réseau : X.X.X.X",
+        "Diffusion : X.X.X.X",
+    ),
     lesson=PREDIRE,
 )
 

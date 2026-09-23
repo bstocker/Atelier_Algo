@@ -125,6 +125,12 @@
       el.body.appendChild(lesson);
     }
 
+    if (data.output_format && data.output_format.length) {
+      var format = section("Format de sortie montré à l'élève");
+      format.appendChild(lines(data.output_format));
+      el.body.appendChild(format);
+    }
+
     // Une question de QCM n'a ni sortie ni code : la fiche saute ces deux
     // sections plutôt que de montrer des cadres vides.
     if (data.target && data.target.length) {

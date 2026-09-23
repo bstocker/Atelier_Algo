@@ -299,6 +299,18 @@ button[disabled] { opacity: .5; cursor: not-allowed; }
 .live thead th { white-space: nowrap; }
 .live th.rotate { font-size: .7rem; }
 .live td.cell { text-align: center; padding: .3rem; }
+/* La colonne des noms reste figée quand on fait défiler les exercices.
+   Elle doit rester opaque pour masquer les pastilles qui passent dessous. */
+.live th:first-child, .live td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface-1);
+  box-shadow: inset -1px 0 var(--border);
+}
+/* L'opacité d'une ligne inactive rendrait la cellule figée transparente :
+   on estompe les cellules, et seulement le texte du nom. */
+.live tr.stale { opacity: 1; }
+.live tr.stale td:not(:first-child),
+.live tr.stale td:first-child > span { opacity: .45; }
 .dot {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.6rem; height: 1.6rem; border-radius: 6px; font-size: .85rem;
@@ -387,6 +399,9 @@ pre.code .empty { color: var(--critical); font-weight: 700; }
 .lesson ul { margin: 0; padding-left: 1.2rem; }
 .lesson li { margin-bottom: .25rem; font-size: .92rem; }
 .lesson li:last-child { margin-bottom: 0; }
+.lesson ul + #lesson-format { margin-top: .75rem; }
+.lesson h4 { font-size: .85rem; margin: 0 0 .35rem; }
+#lesson-format pre { min-height: 0; font-size: .85rem; padding: .5rem .75rem; }
 .lesson code {
   background: var(--surface-2); padding: .1em .35em; border-radius: 4px;
   font-size: .9em;

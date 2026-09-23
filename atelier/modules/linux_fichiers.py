@@ -6,7 +6,7 @@ affiche. Tout le chapitre repose sur ces quatre questions.
 """
 
 from ..engine import Module, Pattern, _opts, debug_pattern, predict_from
-from .linux_commun import lecon, listing, trier
+from .linux_commun import lecon, listing, predire, trier
 
 # Dossiers personnels : deux entrées cachées, deux visibles. Les noms sont
 # choisis pour que l'ordre de `ls` soit le même avec ou sans le point de
@@ -407,7 +407,17 @@ PREDIRE_RANGER = predict_from(
     name="Prédire : le dossier après un mv",
     why="Deux dossiers à tenir à jour, et un fichier qui passe de l'un à l'autre.",
     level=3,
+    output_format=(
+        ".:",
+        "<entrée>",
+        "…",
+        "",
+        "sauvegarde:",
+        "<entrée>",
+        "…",
+    ),
     dims=(("g", 0, 3), ("n", 1, 2)),
+    lesson=predire(RANGER),
 )
 
 

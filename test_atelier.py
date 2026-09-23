@@ -5,6 +5,7 @@ import ipaddress
 import itertools
 import json
 import os
+import random
 import re
 import shutil
 import sqlite3
@@ -472,6 +473,28 @@ class AtelierTest(unittest.TestCase):
         self.assertEqual(len(res["diff"]), 1)
         self.assertTrue(res["count_mismatch"])
         self.assertNotIn("\n".join(attendu), json.dumps(res))
+
+    def test_predict_shows_the_output_format(self):
+        _, code = self.make_session(patterns=("net_predire_hotes",))
+        client, _ = self.join(code)
+        task = client.get("/api/task/net_predire_hotes").get_json()
+        self.assertEqual(task["output_format"], ["Hôtes : XXXX"])
+
+    def test_every_prediction_gives_a_format_without_its_answer(self):
+        """Le format dit quoi écrire, jamais ce que cela vaut."""
+        for key, pattern in ex.PATTERNS.items():
+            if pattern.mode != "predict":
+                continue
+            with self.subTest(exercice=key):
+                self.assertTrue(pattern.output_format)
+                for graine in range(10):
+                    params = ex.draw_params(key, random.Random(graine))
+                    code = ex.code_template(key, params)
+                    # Une ligne déjà écrite dans le code n'est pas un secret.
+                    secretes = [ligne for ligne in ex.target_rows(key, params)
+                                if ligne and ligne not in code]
+                    for ligne in secretes:
+                        self.assertNotIn(ligne, pattern.output_format)
 
     def test_predict_reveals_the_output_once_found(self):
         _, code = self.make_session(patterns=("predire_magique",))
@@ -2009,6 +2032,19 @@ class LinuxTest(unittest.TestCase):
                                     # ou un rappel qui leur est propre
                 with self.subTest(exercice=key):
                     self.assertIn("session de terminal", pattern.lesson[0])
+
+    def test_predictions_explain_the_session_not_c_loops(self):
+        """Le rappel par défaut parle des boucles C : hors sujet ici."""
+        for module in self.chapitre().modules:
+            for key in module.keys:
+                pattern = ex.PATTERNS[key]
+                if pattern.mode != "predict":
+                    continue
+                with self.subTest(exercice=key):
+                    self.assertIn("session de terminal", pattern.lesson[0])
+                    self.assertIn("rejouez", pattern.lesson[1])
+                    self.assertNotIn("exercices d'entrée",
+                                     " ".join(pattern.lesson))
 
     def test_listing_the_hidden_entries(self):
         self.assertEqual(

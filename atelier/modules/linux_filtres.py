@@ -10,7 +10,7 @@ alors le contenu du fichier qui change d'un élève à l'autre.
 """
 
 from ..engine import Module, Pattern, _opts, debug_pattern, predict_from
-from .linux_commun import compte, lecon, paquets
+from .linux_commun import compte, lecon, paquets, predire
 
 # Journaux mêlant « Erreur » et « erreur » : sans les deux casses, l'option
 # -i ne se distinguerait pas d'une recherche ordinaire.
@@ -356,7 +356,13 @@ PREDIRE_COLONNE = predict_from(
     name="Prédire : le découpage en colonnes",
     why="Compter les champs d'une ligne, séparateur en main.",
     level=3,
+    output_format=(
+        "<champ>",
+        "<champ>",
+        "…",
+    ),
     dims=(("g", 0, 3),),
+    lesson=predire(COLONNE),
 )
 
 

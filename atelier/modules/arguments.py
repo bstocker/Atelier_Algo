@@ -352,6 +352,12 @@ PREDIRE_SOMME = predict_from(
     name="Prédire : la somme des arguments",
     why="Suivre un accumulateur qui s'affiche à chaque tour.",
     level=2,
+    output_format=(
+        "TOTAL",
+        "TOTAL",
+        "…",
+        "total TOTAL",
+    ),
     dims=(("n", 3, 5), ("g", 0, 3)),
 )
 

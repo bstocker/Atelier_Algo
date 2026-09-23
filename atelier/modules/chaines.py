@@ -438,6 +438,7 @@ PREDIRE_ENVERS = predict_from(
     name="Prédire : la phrase à l'envers",
     why="Lire une chaîne à rebours sans l'écrire, juste en la parcourant.",
     level=3,
+    output_format=("<une seule ligne de texte>",),
 )
 
 

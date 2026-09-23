@@ -34,6 +34,8 @@
     diagNote: document.getElementById("diag-note"),
     lesson: document.getElementById("lesson"),
     lessonList: document.getElementById("lesson-list"),
+    lessonFormat: document.getElementById("lesson-format"),
+    lessonFormatLines: document.getElementById("lesson-format-lines"),
     traceBox: document.getElementById("trace-box"),
     traceBody: document.getElementById("trace-body"),
     check: document.getElementById("check-btn"),
@@ -291,15 +293,19 @@
     }
   }
 
-  function renderLesson(lines) {
+  function renderLesson(lines, format) {
+    lines = lines || [];
+    format = format || [];
     el.lessonList.textContent = "";
-    if (!lines || !lines.length) { el.lesson.hidden = true; return; }
     lines.forEach(function (line) {
       var li = document.createElement("li");
       richText(li, line);
       el.lessonList.appendChild(li);
     });
-    el.lesson.hidden = false;
+    el.lessonList.hidden = !lines.length;
+    el.lessonFormatLines.textContent = format.join("\n");
+    el.lessonFormat.hidden = !format.length;
+    el.lesson.hidden = !lines.length && !format.length;
   }
 
   function renderTrace(steps) {
@@ -447,7 +453,7 @@
 
       applyMode(data);
       if (data.target) renderLines(el.target, data.target);
-      renderLesson(data.lesson);
+      renderLesson(data.lesson, data.output_format);
       renderTrace(null);
       if (data.mode === "complete") {
         renderBlanks();

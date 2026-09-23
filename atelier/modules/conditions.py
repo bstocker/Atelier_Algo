@@ -391,6 +391,11 @@ PREDIRE_GAGNANT = predict_from(
     name="Prédire : le joueur qui gagne",
     why="Trois branches à dérouler pour chaque valeur du compteur.",
     level=3,
+    output_format=(
+        "X-Y : <Joueur N gagne ou Egalite>",
+        "X-Y : <Joueur N gagne ou Egalite>",
+        "…",
+    ),
     dim=("n", 4, 6),
 )
 

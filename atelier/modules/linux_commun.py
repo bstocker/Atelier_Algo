@@ -24,6 +24,27 @@ def lecon(*points):
     return SESSION + points
 
 
+def predire(base):
+    """Rappel d'une prédiction tirée de `base`.
+
+    Le rappel par défaut de `predict_from` parle de boucles C. Ici, la
+    convention de lecture change — la dernière commande n'affiche rien,
+    c'est à l'élève de l'écrire — mais le fond reste celui de l'exercice
+    d'origine : pour prédire `cut`, il faut savoir ce que fait `cut`.
+    """
+    return (
+        "Le bloc ci-dessous est une **session de terminal** : les lignes "
+        "qui commencent par `$` sont les commandes tapées, les autres ce "
+        "qu'elles ont affiché. La **dernière** commande n'a encore rien "
+        "affiché : c'est sa sortie que vous écrivez.",
+        "Ne devinez pas : **rejouez** les commandes dans l'ordre, en "
+        "partant de ce que les précédentes ont affiché.",
+    ) + tuple(base.lesson[len(SESSION):]) + (
+        "Les espaces comptent. Une ligne décalée d'un espace est fausse.",
+        "Les espaces en fin de ligne, eux, sont ignorés.",
+    )
+
+
 def trier(noms):
     """Ordonne des noms comme `ls` le fait.
 

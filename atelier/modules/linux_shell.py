@@ -7,7 +7,7 @@ de quoi comprendre pourquoi un script mal cité tombe en panne.
 """
 
 from ..engine import Module, Pattern, _opts, debug_pattern, predict_from
-from .linux_commun import lecon, trier
+from .linux_commun import lecon, predire, trier
 
 ARGUMENTS = (
     ("alpha", "beta", "gamma", "delta"),
@@ -359,7 +359,13 @@ PREDIRE_POUR_CHAQUE = predict_from(
     name="Prédire : la boucle sur les fichiers",
     why="Développer l'étoile soi-même, puis dérouler la boucle.",
     level=4,
+    output_format=(
+        "-- <fichier>",
+        "-- <fichier>",
+        "…",
+    ),
     dims=(("g", 0, 3),),
+    lesson=predire(POUR_CHAQUE),
 )
 
 

@@ -733,6 +733,11 @@ PREDIRE_TRIANGLE = predict_from(
     name="Prédire : triangle aligné à droite",
     why="Deux boucles se partagent la ligne. Comptez les espaces avant les étoiles.",
     level=3,
+    output_format=(
+        "<espaces><étoiles>",
+        "<espaces><étoiles>",
+        "…",
+    ),
     dim=("n", 3, 6),
 )
 
@@ -742,6 +747,11 @@ PREDIRE_MAGIQUE = predict_from(
     name="Prédire : carré magique",
     why="Un if dans deux boucles : la sortie dépend de la position, pas du compteur seul.",
     level=4,
+    output_format=(
+        "<une ligne de * et de o>",
+        "<une ligne de * et de o>",
+        "…",
+    ),
     dim=("n", 3, 6),
 )
 

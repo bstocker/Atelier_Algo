@@ -289,6 +289,7 @@ def api_pattern(key):
         "module": ex.module_of(key).title,
         "chapter": ex.chapter_of(key).title,
         "lesson": list(pattern.lesson),
+        "output_format": list(pattern.output_format),
         "teacher_note": pattern.teacher_note,
         "code": ex.render_code(key, params, dict(pattern.ref)),
         "target": ex.target_rows(key, params),

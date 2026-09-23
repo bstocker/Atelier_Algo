@@ -393,6 +393,7 @@ def api_task(key):
         "action": ex.chapter_of(key).action,
         "params": params,
         "lesson": list(pattern.lesson),
+        "output_format": list(pattern.output_format),
         "exam": exam,
         "solved": None if exam else solved,
         "answered": bool(task["attempts"]),
