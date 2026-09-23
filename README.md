@@ -6,7 +6,7 @@
 🎯 PROJET ARCHITECTURE SI — Atelier « boucles sans IA »
 ------------------------------------------------------------------------------------------------------
 
-Cet atelier construit, déploie et exploite une application web qui enseigne les **bases de la programmation et du système** à des débutants — le langage C, la ligne de commande Linux, et des QCM — conçue pour que le copier-coller dans une IA n'apporte aucun avantage.
+Cet atelier construit, déploie et exploite une application web qui enseigne les **bases de la programmation et du système** à des débutants — le langage C, la ligne de commande Linux, l'adressage réseau, et des QCM — conçue pour que le copier-coller dans une IA n'apporte aucun avantage.
 
 Les exercices classiques (« écris une pyramide en étoiles », « quelle commande liste les fichiers cachés ? ») sont résolus en une seconde par un assistant IA : l'élève obtient la réponse sans construire le raisonnement. La réponse retenue ici est de **déplacer la tâche** — au lieu de *produire* du code, l'élève *lit et comprend l'exécution*. Quatre leviers rendent la triche sans intérêt :
 
@@ -161,7 +161,7 @@ Le catalogue a trois étages : **chapitre → module → exercice**.
 
 Un **chapitre** réunit des modules d'un même domaine. Un **module** porte un titre, un niveau indicatif et un résumé. Chaque **exercice** garde son propre niveau, plus fin, et son mode.
 
-Trois chapitres aujourd'hui : **Langage C** et **Ligne de commande Linux**, tous deux décrits en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
+Quatre chapitres aujourd'hui : **Langage C**, **Ligne de commande Linux** et **Réseau**, tous trois décrits en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
 
 **55 exercices de C** répartis en six modules :
 
@@ -183,7 +183,13 @@ Trois chapitres aujourd'hui : **Langage C** et **Ligne de commande Linux**, tous
 | Droits et recherche | ●●●○ | 6 | `ls -l`, `chmod` octal et symbolique, `find`, `-delete` |
 | Le shell : variables et enchaînements | ●●●● | 7 | `$1` et `$#`, `&&` / `\|\|`, `for`, les étoiles, `sed`, `awk` |
 
-**83 exercices de C et de Linux**, plus les 15 questions du QCM livré.
+**10 exercices de réseau** dans un premier module :
+
+| Module | Niveau | Exercices | Ce qu'il fait travailler |
+| --- | --- | --- | --- |
+| Masques réseau | ●●○○ | 10 | Préfixe CIDR et masque décimal, `ET` / `OU`, réseau, diffusion, nombre d'hôtes, découpage |
+
+**93 exercices de C, de Linux et de réseau**, plus les 15 questions du QCM livré.
 
 **Ajouter un module** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre. **Ajouter un QCM** ne demande pas de code du tout : un classeur Excel déposé depuis la console suffit.
 
@@ -202,9 +208,9 @@ Trois modes coexistent :
 
 | Mode | Ce que fait l'élève | Levier anti-IA |
 | --- | --- | --- |
-| **Compléter** (58) | Choisit dans des menus le morceau qui manque au programme ou à la commande | Un menu déroulant ne se colle pas dans une IA |
-| **Prédire** (11) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
-| **Trouver le bug** (14) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
+| **Compléter** (64) | Choisit dans des menus le morceau qui manque au programme ou à la commande | Un menu déroulant ne se colle pas dans une IA |
+| **Prédire** (13) | Écrit la sortie que produit un code donné entier | Il n'y a pas d'énoncé à copier, seulement un code à lire |
+| **Trouver le bug** (16) | Désigne la cause de l'écart entre l'attendu et l'obtenu | Exige de comprendre le défaut, pas de produire du code |
 | **QCM** | Choisit l'une des quatre propositions | Propositions mélangées par copie, et un essai manqué coûte |
 
 Dans les quatre modes, un essai manqué entame la valeur du motif.
@@ -242,6 +248,30 @@ Deux contraintes propres au chapitre, et leur raison :
 - **L'ordre de `find` et celui de `ls` dépendent du disque et de la locale.** Les commandes de recherche finissent donc par `| sort`, et les jeux de noms sont choisis pour que l'ordre soit le même avec ou sans le point de tête d'un fichier caché.
 
 La difficulté monte d'un module à l'autre : se repérer et lister (niveaux 1 à 3), filtrer et trier (2 à 4), droits et recherche (3 à 4), puis le shell comme langage — variables, codes de retour, boucles, `sed` et `awk` (3 à 4).
+
+### Le chapitre Réseau
+
+Les mêmes motifs encore — menus, tirage par élève, correction côté serveur, trois modes — appliqués à l'adressage IP. Un exercice de réseau montre une **fiche de calcul** : les lignes `nom : valeur` sont les données, les lignes `nom = …` disent ce qu'on en tire. Le trou est dans la fiche, la cible est le résultat.
+
+```
+Adresse   : 10.1.200.33/20
+Masque    : __________
+Réseau    = Adresse ET Masque
+Diffusion = Adresse OU (NON Masque)
+```
+
+Le premier module, **Masques réseau**, monte en quatre paliers :
+
+| Niveau | Exercices |
+| --- | --- |
+| Découverte | L'adresse du réseau d'un /24 : `/24` s'écrit `255.255.255.0` |
+| Facile | Combien de machines dans un /p ; la diffusion, `OU (NON Masque)` ; prédire le nombre d'hôtes |
+| Moyen | Sur le même réseau ? (un /26) ; découper un /24 en quatre ; bug : la passerelle hors d'un /25 |
+| Avancé | Un /20 qui coupe le troisième octet ; bug : le routeur sur l'adresse de diffusion d'un /27 ; prédire réseau et diffusion d'un /20 |
+
+**Les calculs sont confrontés à `ipaddress`.** L'application les fait bit à bit, comme l'élève sur papier (`atelier/modules/reseau_commun.py`). `ReseauTest` les recalcule avec le module `ipaddress` de la bibliothèque standard, pour chaque tirage : contrairement au chapitre Linux, la référence est toujours sous la main, et la vérification fait partie de la suite de tests.
+
+Les distracteurs sont de vrais masques — des 1 puis des 0 — voisins de la bonne réponse : `/25` et `/27` autour d'un `/26`, `/19` et `/21` autour d'un `/20`. Et les voisins du poste A, dans « Sur le même réseau ? », sont choisis pour que chaque mauvais masque se trompe sur au moins l'un d'eux.
 
 ### Le chapitre QCM
 
@@ -428,13 +458,13 @@ C'est le mode le plus résistant à une IA : il n'y a pas d'énoncé à coller, 
 
 Les espaces de début comptent, ceux de fin sont ignorés, et les lignes vides finales sont retirées avant comparaison.
 
-`predict_from()` dérive un exercice de prédiction à partir de n'importe quel motif existant : il remplit les trous avec la sélection de référence et bascule le mode. Ajouter une prédiction sur un nouveau motif tient en cinq lignes.
+`predict_from()` dérive un exercice de prédiction à partir de n'importe quel motif existant : il remplit les trous avec la sélection de référence et bascule le mode. Ajouter une prédiction sur un nouveau motif tient en cinq lignes. Son rappel de cours parle de boucles ; `lesson=` le remplace quand le motif n'en a pas, comme une fiche de réseau.
 
 ### Le mode « trouver le bug »
 
 Un code fautif, la sortie qu'il **devrait** produire, celle qu'il produit **réellement**, et quatre causes possibles. L'écart est sous les yeux : ce qui fait l'exercice, c'est de l'expliquer.
 
-Le catalogue en compte quatorze, dix en C et quatre en Linux. Quelques-uns, pour donner le ton :
+Le catalogue en compte seize : dix en C, quatre en Linux et deux en réseau. Quelques-uns, pour donner le ton :
 
 | Exercice | Le défaut *(réservé à l'enseignant)* | Ce qu'on observe |
 | --- | --- | --- |
@@ -445,6 +475,7 @@ Le catalogue en compte quatorze, dix en C et quatre en Linux. Quelques-uns, pour
 | Bug : la liste écrite dans un fichier | `>` au lieu de `>>` | Une seule ligne : le fichier est vidé à chaque tour |
 | Bug : la liste sans doublon | `uniq` sans `sort` | Les doublons non consécutifs restent |
 | Bug : compter les lignes du rapport | `$fichier` sans guillemets | Deux erreurs, et un `0 total` |
+| Bug : joindre la passerelle | Masque `/25` au lieu de `/24` | La diffusion tombe en `.127`, la passerelle en `.254` est hors du réseau |
 
 **Le nom de l'exercice désigne le but du programme, jamais son défaut.** Un titre comme « la borne exclue » donnerait la réponse avant lecture. Le nom du défaut part dans `teacher_note`, que seul le formulaire de composition affiche — un test vérifie qu'il ne descend jamais dans la réponse envoyée à l'élève.
 
@@ -452,7 +483,7 @@ Chaque cause porte sa propre explication, affichée après le choix — y compri
 
 Les diagnostics sont des phrases, pas du code : ils s'affichent en boutons radio, et leur ordre est mélangé par étudiant. Deux tests vérifient que chaque exercice présente bien un écart visible à **toutes** les tailles tirables, et que chaque option porte une explication.
 
-`debug_pattern()` construit un tel exercice à partir de son gabarit fautif, d'une fonction pour la sortie attendue, d'une autre pour la sortie obtenue, et des quatre diagnostics.
+`debug_pattern()` construit un tel exercice à partir de son gabarit fautif, d'une fonction pour la sortie attendue, d'une autre pour la sortie obtenue, et des quatre diagnostics. L'intitulé dit « Ce programme devait… » ; `sujet=` le change quand on lit une configuration ou un plan d'adressage.
 
 ### Les huit motifs imbriqués
 
@@ -609,6 +640,8 @@ atelier/
     linux_commun.py     Ce que les modules Linux partagent : session, listings
     linux_fichiers.py   linux_filtres.py
     linux_droits.py     linux_shell.py
+    reseau_commun.py    Ce que les modules Réseau partagent : fiche, calcul bit à bit
+    reseau_masques.py
     qcm_docker.py       Le QCM livré avec l'application
   scoring.py            Barème : valeur d'un motif, essais manqués, pénalités
   student.py            Parcours étudiant et API
@@ -747,7 +780,7 @@ Où vit la base, sous quel mode de journalisation, sur quel type de disque, et c
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 170 tests
+python3 -m unittest test_atelier -v     # 183 tests
 ```
 
 ---------------------------------------------------
@@ -761,12 +794,13 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] Une sélection incorrecte est signalée ligne par ligne, sans faux positif.
 - [x] La régénération aléatoire donne une cible différente sans casser la correction.
 - [x] Pour un exercice de Linux, la sortie simulée est celle du vrai shell, au caractère près, pour chaque tirage et chaque option (`outils/verif_linux.py`).
+- [x] Pour un exercice de réseau, chaque résultat est celui que donne le module `ipaddress`, pour chaque tirage (`ReseauTest`).
 - [x] La réponse attendue ne transite jamais jusqu'au navigateur.
 - [x] Une sortie de fenêtre compte pour une seule pénalité, quel que soit le nombre d'événements émis par le navigateur.
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (170 tests).
+La suite `test_atelier.py` couvre ces points (183 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -786,13 +820,14 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 | Moyenne | Trace des boucles imbriquées | Étendre l'exécution pas à pas aux motifs à deux boucles | M |
 | Moyenne | Version imprimable | Fiches papier générées depuis les mêmes exercices | M |
 | Moyenne | Version Python d'initiation | Boucles simples : `for`, `while`, accumulateur, compteur | M |
+| Moyenne | Chapitre Réseau : suite | Routage et table de routage, IPv6, VLSM (découpage en tailles inégales) | M |
 | Moyenne | Module « Réseau et processus » | Sous le chapitre Linux : `ps`, `kill`, `ss`, `curl`, les tubes nommés | M |
 | Basse | Boucles imbriquées libres | Motifs personnalisés pour élèves avancés | M |
 | Basse | Internationalisation | Textes séparés pour d'autres langues | M |
 
 Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le moteur est déjà séparé du contenu.
 
-*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas, comptes enseignants, mode examen, chapitre QCM avec import Excel, et chapitre « Ligne de commande Linux ».
+*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas, comptes enseignants, mode examen, chapitre QCM avec import Excel, chapitre « Ligne de commande Linux », et chapitre « Réseau » avec son module « Masques réseau ».
 
 ---------------------------------------------------
 ⚠️ Contraintes, risques et limites connues

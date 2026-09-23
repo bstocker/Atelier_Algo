@@ -214,7 +214,8 @@ def step_trace(blank_id, condition, deltas, emit, action):
 # --------------------------------------------------------------------------
 
 def debug_pattern(key, name, but, defaut, tpl, attendu, obtenu,
-                  diagnostics, bonne, level, dim=None, dims=(), derive=None):
+                  diagnostics, bonne, level, dim=None, dims=(), derive=None,
+                  sujet="Ce programme"):
     """Exercice de diagnostic : un code fautif, sa sortie, et quatre causes.
 
     Rien n'est cache ici — l'eleve voit ce qui etait attendu et ce qui sort.
@@ -224,12 +225,15 @@ def debug_pattern(key, name, but, defaut, tpl, attendu, obtenu,
     un titre comme « la borne exclue » donnerait la reponse avant lecture.
     Le nom du defaut part dans `teacher_note`, que seul le formulaire de
     composition affiche.
+
+    `sujet` nomme ce que l'eleve lit : un programme le plus souvent, mais
+    une configuration ou un plan d'adressage n'est pas un programme.
     """
     return Pattern(
         key=key,
         name=name,
-        brief="Ce programme devait %s. Il n'y arrive pas : trouvez pourquoi."
-              % but,
+        brief="%s devait %s. Il n'y arrive pas : trouvez pourquoi."
+              % (sujet, but),
         why="Une seule instruction est en cause.",
         teacher_note="Défaut : %s" % defaut,
         lesson=(
@@ -255,13 +259,17 @@ def debug_pattern(key, name, but, defaut, tpl, attendu, obtenu,
 # Mode « predire la sortie »
 # --------------------------------------------------------------------------
 
-def predict_from(base, key, name, why, level, dim=None, dims=None):
+def predict_from(base, key, name, why, level, dim=None, dims=None,
+                 lesson=None):
     """Derive un exercice de prediction a partir d'un motif existant.
 
     Le code est livre complet, trous deja remplis par la selection de
     reference ; l'eleve n'a rien a choisir, il ecrit la sortie attendue.
     C'est le mode le plus resistant a une IA : il n'y a pas d'enonce a
     copier, seulement un code a lire.
+
+    `lesson` remplace le rappel par defaut, qui parle de boucles : une
+    fiche de calcul ne se deroule pas tour par tour.
     """
     tpl = base.tpl
     for blank_id, (_label, options) in base.blanks.items():
@@ -280,7 +288,7 @@ def predict_from(base, key, name, why, level, dim=None, dims=None):
         name=name,
         brief="Lisez le code, puis écrivez la sortie qu'il produit.",
         why=why,
-        lesson=(
+        lesson=lesson or (
             "Ne devinez pas : **déroulez** la boucle tour par tour, "
             "comme dans les exercices d'entrée.",
             "Les espaces comptent. Une ligne décalée d'un espace est fausse.",

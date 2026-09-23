@@ -1,6 +1,7 @@
 """Tests de bout en bout : session, exercices, penalites, notation."""
 
 import io
+import ipaddress
 import itertools
 import json
 import os
@@ -2114,6 +2115,230 @@ class LinuxTest(unittest.TestCase):
         self.assertEqual(
             client.get("/api/task/lx_chercher").get_json()["action"],
             "Exécuter la commande")
+
+
+class ReseauTest(unittest.TestCase):
+    """Le chapitre Réseau : des fiches de calcul, et leur vrai résultat.
+
+    Les calculs de l'application sont faits bit à bit, comme sur papier.
+    Ils sont confrontés ici au module `ipaddress` de la bibliothèque
+    standard, pour chaque tirage : une fiche qui annoncerait un faux
+    réseau enseignerait une chose fausse.
+    """
+
+    RESEAU_KEYS = ("net_reseau", "net_hotes", "net_diffusion",
+                   "net_meme_reseau", "net_decoupage", "net_masque_coupe",
+                   "net_bug_passerelle", "net_bug_plan", "net_predire_hotes",
+                   "net_predire_masque")
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.app = create_app({
+            "TESTING": True,
+            "DATABASE": self.path,
+            "SECRET_KEY": "test",
+            "ADMIN_USER": "prof",
+            "ADMIN_PASSWORD": "secret",
+        })
+        self.admin = self.app.test_client()
+        self.admin.post("/admin/login",
+                        data={"username": "prof", "password": "secret"})
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(self.path + suffix)
+            except OSError:
+                pass
+
+    def chapitre(self):
+        for chapter in ex.CHAPTERS:
+            if chapter.key == "reseau":
+                return chapter
+        raise AssertionError("pas de chapitre Réseau")
+
+    @staticmethod
+    def net(adresse, prefixe):
+        return ipaddress.ip_network("%s/%d" % (adresse, prefixe), strict=False)
+
+    def test_the_chapter_holds_the_masks_module(self):
+        chapitre = self.chapitre()
+        self.assertEqual([m.key for m in chapitre.modules], ["reseau_masques"])
+        self.assertEqual(ex.MODULE_BY_KEY["reseau_masques"].title,
+                         "Masques réseau")
+        self.assertEqual(tuple(ex.MODULE_BY_KEY["reseau_masques"].keys),
+                         self.RESEAU_KEYS)
+
+    def test_the_chapter_covers_every_difficulty(self):
+        """Des exercices faciles, moyens et difficiles, pas un seul palier."""
+        niveaux = {ex.PATTERNS[k].level
+                   for m in self.chapitre().modules for k in m.keys}
+        self.assertEqual(niveaux, set(ex.LEVELS))
+
+    def test_the_chapter_uses_the_three_modes(self):
+        modes = {ex.PATTERNS[k].mode
+                 for m in self.chapitre().modules for k in m.keys}
+        self.assertEqual(modes, {"complete", "debug", "predict"})
+
+    def test_every_sheet_explains_how_to_read_itself(self):
+        """L'élève qui ne voit qu'un exercice doit savoir lire la fiche."""
+        for key in self.RESEAU_KEYS:
+            pattern = ex.PATTERNS[key]
+            if pattern.mode != "complete":
+                continue
+            with self.subTest(exercice=key):
+                self.assertIn("fiche de calcul", pattern.lesson[0])
+
+    def test_nothing_speaks_of_programs_or_loops(self):
+        """Une fiche d'adressage n'est ni un programme ni une boucle."""
+        for key in self.RESEAU_KEYS:
+            pattern = ex.PATTERNS[key]
+            with self.subTest(exercice=key):
+                self.assertNotIn("programme", pattern.brief)
+                self.assertNotIn("boucle", " ".join(pattern.lesson))
+
+    def test_the_bitwise_helpers_agree_with_ipaddress(self):
+        from atelier.modules import reseau_commun as rc
+        for adresse in ("192.168.1.37", "10.1.200.33", "172.20.130.250",
+                        "0.0.0.0", "255.255.255.255"):
+            for prefixe in range(0, 33):
+                net = self.net(adresse, prefixe)
+                masque = str(net.netmask)
+                with self.subTest(adresse=adresse, prefixe=prefixe):
+                    self.assertEqual(rc.pointee(rc.masque(prefixe)), masque)
+                    self.assertEqual(rc.prefixe(masque), prefixe)
+                    self.assertEqual(rc.reseau(adresse, masque),
+                                     str(net.network_address))
+                    self.assertEqual(rc.diffusion(adresse, masque),
+                                     str(net.broadcast_address))
+        for prefixe in range(16, 31):    # plus court, trop long à énumérer
+            self.assertEqual(rc.hotes(prefixe),
+                             len(list(self.net("10.0.0.0", prefixe).hosts())))
+
+    def attendu(self, key, p):
+        """La cible de l'exercice, recalculée avec `ipaddress`."""
+        if key == "net_reseau":
+            return ["Réseau : %s" % self.net(p["ip"], 24).network_address]
+        if key in ("net_hotes", "net_predire_hotes"):
+            return ["Hôtes : %d" % (self.net("192.168.1.0", p["p"])
+                                    .num_addresses - 2)]
+        if key == "net_diffusion":
+            net = ipaddress.ip_network("%s/%s" % (p["ip"], p["masque"]),
+                                       strict=False)
+            return ["Diffusion : %s" % net.broadcast_address]
+        if key == "net_meme_reseau":
+            a = self.net(p["a"], 26)
+            return ["%s : %s" % (v, "même réseau"
+                                 if ipaddress.ip_address(v) in a
+                                 else "autre réseau")
+                    for v in p["voisins"]]
+        if key == "net_decoupage":
+            net = self.net("192.168.%d.0" % p["c"], 24)
+            return ["%s à %s" % (s.network_address, s.broadcast_address)
+                    for s in net.subnets(new_prefix=26)]
+        if key in ("net_masque_coupe", "net_predire_masque"):
+            net = self.net(p["ip"], 20)
+            return ["Réseau : %s" % net.network_address,
+                    "Diffusion : %s" % net.broadcast_address]
+        if key == "net_bug_passerelle":
+            net = self.net("192.168.%d.0" % p["c"], 24)
+            passerelle = ipaddress.ip_address("192.168.%d.254" % p["c"])
+            self.assertIn(ipaddress.ip_address(
+                "192.168.%d.%d" % (p["c"], p["d"])), net)
+            return ["Réseau : %s" % net.network_address,
+                    "Diffusion : %s" % net.broadcast_address,
+                    "Passerelle : %s" % ("joignable" if passerelle in net
+                                         else "hors du réseau")]
+        if key == "net_bug_plan":
+            # Le plan voulu : le routeur en avant-dernière adresse, la
+            # dernière d'un /27 étant sa diffusion.
+            net = self.net("192.168.%d.%d" % (p["c"], p["base"]), 27)
+            voulu = [p["s1"], p["s2"], p["s3"], p["r"] - 1]
+            hotes = set(net.hosts())
+            return ["%s : %s" % (nom, "adresse valable"
+                                 if ipaddress.ip_address(
+                                     "192.168.%d.%d" % (p["c"], x)) in hotes
+                                 else "adresse refusée")
+                    for nom, x in zip(("Serveur 1", "Serveur 2", "Serveur 3",
+                                       "Routeur"), voulu)]
+        raise AssertionError(key)
+
+    def test_every_target_agrees_with_ipaddress_for_every_draw(self):
+        for key in self.RESEAU_KEYS:
+            pattern = ex.PATTERNS[key]
+            for params in tirages(pattern):
+                with self.subTest(exercice=key, tirage=params):
+                    self.assertEqual(ex.target_rows(key, params),
+                                     self.attendu(key, params))
+
+    def test_every_wrong_mask_is_a_real_prefix(self):
+        """Un distracteur est un masque valable : des 1, puis des 0."""
+        from atelier.modules import reseau_commun as rc
+        for key in ("net_reseau", "net_meme_reseau", "net_masque_coupe"):
+            for option in ex.PATTERNS[key].blanks["masque"][1]:
+                with self.subTest(exercice=key, masque=option.c):
+                    prefixe = rc.prefixe(option.c)
+                    self.assertEqual(rc.pointee(rc.masque(prefixe)), option.c)
+
+    def test_the_debug_outputs_are_those_of_the_faulty_sheet(self):
+        """L'obtenu est ce que donne vraiment la fiche fautive."""
+        for params in tirages(ex.PATTERNS["net_bug_passerelle"]):
+            poste = "192.168.%d.%d" % (params["c"], params["d"])
+            net = self.net(poste, 25)
+            passerelle = ipaddress.ip_address("192.168.%d.254" % params["c"])
+            with self.subTest(tirage=params):
+                self.assertEqual(
+                    ex.broken_rows("net_bug_passerelle", params),
+                    ["Réseau : %s" % net.network_address,
+                     "Diffusion : %s" % net.broadcast_address,
+                     "Passerelle : %s" % ("joignable" if passerelle in net
+                                          else "hors du réseau")])
+        for params in tirages(ex.PATTERNS["net_bug_plan"]):
+            net = self.net("192.168.%d.%d" % (params["c"], params["base"]), 27)
+            with self.subTest(tirage=params):
+                self.assertEqual(params["r"], net.broadcast_address.packed[3])
+                self.assertEqual(ex.broken_rows("net_bug_plan", params)[-1],
+                                 "Routeur : adresse de diffusion, refusée")
+
+    def test_a_network_in_slash_24(self):
+        params = dict(g=0, **ex.PATTERNS["net_reseau"].derive({"g": 0}))
+        self.assertEqual(ex.target_rows("net_reseau", params),
+                         ["Réseau : 192.168.1.0"])
+
+    def test_a_slash_20_cuts_the_third_octet(self):
+        params = dict(g=1, **ex.PATTERNS["net_masque_coupe"].derive({"g": 1}))
+        self.assertEqual(ex.target_rows("net_masque_coupe", params),
+                         ["Réseau : 10.1.192.0", "Diffusion : 10.1.207.255"])
+
+    def test_a_slash_24_splits_into_four(self):
+        params = dict(g=1, **ex.PATTERNS["net_decoupage"].derive({"g": 1}))
+        self.assertEqual(ex.target_rows("net_decoupage", params),
+                         ["192.168.42.0 à 192.168.42.63",
+                          "192.168.42.64 à 192.168.42.127",
+                          "192.168.42.128 à 192.168.42.191",
+                          "192.168.42.192 à 192.168.42.255"])
+
+    def test_a_network_exercise_is_solved_like_any_other(self):
+        resp = self.admin.post("/admin/sessions", data={
+            "title": "TP Réseau", "patterns": ["net_reseau", "carre"]})
+        session_id = int(resp.headers["Location"].rstrip("/").split("/")[-1])
+        self.admin.post("/admin/sessions/%d/open" % session_id)
+        page = self.admin.get("/admin/sessions/%d" % session_id) \
+                         .get_data(as_text=True)
+        code = page.split('class="joincode mono">')[1].split("<")[0].strip()
+        client = self.app.test_client()
+        client.post("/join", data={"first_name": "Ada",
+                                   "last_name": "Lovelace", "code": code})
+        task = client.get("/api/task/net_reseau").get_json()
+        self.assertEqual(task["module"], "Masques réseau")
+        self.assertEqual(task["action"], "Lancer le calcul")
+        verdict = client.post("/api/task/net_reseau/check",
+                              json={"selection": {"masque": "b"}}).get_json()
+        self.assertFalse(verdict["ok"])
+        verdict = client.post("/api/task/net_reseau/check",
+                              json={"selection": {"masque": "a"}}).get_json()
+        self.assertTrue(verdict["ok"])
 
 
 class ChargeTest(unittest.TestCase):
