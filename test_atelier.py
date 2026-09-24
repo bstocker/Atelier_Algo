@@ -2606,6 +2606,48 @@ class JournalTest(unittest.TestCase):
             conn.close()
 
 
+class DockerTest(unittest.TestCase):
+    """Le chapitre Docker : des questions de cours, rien au-delà."""
+
+    # Les commandes vues en séance, et elles seules.
+    VUES = {"run", "ps", "stop", "start", "rm"}
+
+    def module(self):
+        return ex.MODULE_BY_KEY["docker_bases"]
+
+    def test_the_chapter_holds_the_basics_module(self):
+        chapitre = [c for c in ex.CHAPTERS if c.key == "docker"]
+        self.assertEqual(len(chapitre), 1)
+        self.assertEqual([m.key for m in chapitre[0].modules],
+                         ["docker_bases"])
+        self.assertEqual(ex.chapter_of(self.module().keys[0]).key, "docker")
+
+    def test_every_exercise_is_a_course_question(self):
+        for key in self.module().keys:
+            pattern = ex.PATTERNS[key]
+            with self.subTest(exercice=key):
+                self.assertEqual(pattern.mode, "qcm")
+                self.assertEqual(len(pattern.blanks["choix"][1]), 4)
+
+    def test_the_right_answers_move_around(self):
+        places = {ex.PATTERNS[k].ref["choix"] for k in self.module().keys}
+        self.assertEqual(places, {"c0", "c1", "c2", "c3"})
+
+    def test_nothing_beyond_the_session(self):
+        """Énoncé, bonne réponse, explication : seules les commandes vues.
+
+        Les propositions fausses, elles, peuvent inventer `docker end`.
+        """
+        for key in self.module().keys:
+            pattern = ex.PATTERNS[key]
+            question, options = pattern.blanks["choix"]
+            bonne = [o for o in options if o.id == pattern.ref["choix"]][0]
+            texte = " ".join((question, bonne.c, bonne.note))
+            with self.subTest(exercice=key):
+                self.assertLessEqual(
+                    set(re.findall(r"docker (\w+)", texte)), self.VUES)
+
+
 class CatalogueTest(unittest.TestCase):
     """Le catalogue doit rester cohérent quand on ajoute des modules."""
 

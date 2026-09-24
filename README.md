@@ -161,7 +161,7 @@ Le catalogue a trois étages : **chapitre → module → exercice**.
 
 Un **chapitre** réunit des modules d'un même domaine. Un **module** porte un titre, un niveau indicatif et un résumé. Chaque **exercice** garde son propre niveau, plus fin, et son mode.
 
-Quatre chapitres aujourd'hui : **Langage C**, **Ligne de commande Linux** et **Réseau**, tous trois décrits en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
+Cinq chapitres aujourd'hui : **Langage C**, **Ligne de commande Linux**, **Réseau** et **Docker**, tous quatre décrits en Python dans `atelier/modules/`, et **QCM**, qui accueille en plus des modules **importés au format Excel** depuis la console (voir **Le chapitre QCM**).
 
 **55 exercices de C** répartis en six modules :
 
@@ -189,7 +189,13 @@ Quatre chapitres aujourd'hui : **Langage C**, **Ligne de commande Linux** et **R
 | --- | --- | --- | --- |
 | Masques réseau | ●●○○ | 10 | Préfixe CIDR et masque décimal, `ET` / `OU`, réseau, diffusion, nombre d'hôtes, découpage |
 
-**94 exercices de C, de Linux et de réseau**, plus les 15 questions du QCM livré.
+**17 questions de cours sur Docker** dans un premier module :
+
+| Module | Niveau | Questions | Ce qu'il fait travailler |
+| --- | --- | --- | --- |
+| Les conteneurs : premiers pas | ●○○○ | 17 | `docker run -d -p`, `--name`, `docker ps -a`, `stop`, `start`, `rm`, Docker Hub |
+
+**94 exercices de C, de Linux et de réseau** et **17 questions sur Docker**, plus les 15 questions du QCM livré.
 
 **Ajouter un module** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre. **Ajouter un QCM** ne demande pas de code du tout : un classeur Excel déposé depuis la console suffit.
 
@@ -272,6 +278,12 @@ Le premier module, **Masques réseau**, monte en quatre paliers :
 **Les calculs sont confrontés à `ipaddress`.** L'application les fait bit à bit, comme l'élève sur papier (`atelier/modules/reseau_commun.py`). `ReseauTest` les recalcule avec le module `ipaddress` de la bibliothèque standard, pour chaque tirage : contrairement au chapitre Linux, la référence est toujours sous la main, et la vérification fait partie de la suite de tests.
 
 Les distracteurs sont de vrais masques — des 1 puis des 0 — voisins de la bonne réponse : `/25` et `/27` autour d'un `/26`, `/19` et `/21` autour d'un `/20`. Et les voisins du poste A, dans « Sur le même réseau ? », sont choisis pour que chaque mauvais masque se trompe sur au moins l'un d'eux.
+
+### Le chapitre Docker
+
+Des **questions de cours**, au format du QCM — une question, quatre propositions, une seule juste — et rien au-delà de la première séance : lancer une image en arrière-plan en publiant son port (`docker run -d -p 81:80`), lister les conteneurs, les arrêter, les relancer, les supprimer, les nommer, et trouver une image sur Docker Hub. Les images citées sont celles de la séance : le serveur httpd de quay.io, Tetris et Mario sur Docker Hub.
+
+Chaque bonne réponse a été rejouée sur un vrai démon Docker : le port déjà alloué, le nom déjà pris, le `docker rm` refusé sur un conteneur qui tourne, le conteneur arrêté qui reste dans `docker ps -a`. `DockerTest` veille à ce qu'aucun énoncé, aucune bonne réponse ni aucune explication ne cite une commande Docker non vue en séance ; seules les propositions fausses peuvent en inventer.
 
 ### Le chapitre QCM
 
@@ -642,6 +654,7 @@ atelier/
     linux_droits.py     linux_shell.py
     reseau_commun.py    Ce que les modules Réseau partagent : fiche, calcul bit à bit
     reseau_masques.py
+    docker_bases.py     Chapitre Docker : les questions de la première séance
     qcm_docker.py       Le QCM livré avec l'application
   scoring.py            Barème : valeur d'un motif, essais manqués, pénalités
   student.py            Parcours étudiant et API
@@ -780,7 +793,7 @@ Où vit la base, sous quel mode de journalisation, sur quel type de disque, et c
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 188 tests
+python3 -m unittest test_atelier -v     # 192 tests
 ```
 
 ---------------------------------------------------
@@ -800,7 +813,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (188 tests).
+La suite `test_atelier.py` couvre ces points (192 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog
@@ -827,7 +840,7 @@ Pistes classées par priorité décroissante. L'effort est indicatif (S = petit,
 
 Chacun de ces modes s'ajoute dans `exercises.py` sans toucher au reste : le moteur est déjà séparé du contenu.
 
-*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas, comptes enseignants, mode examen, chapitre QCM avec import Excel, chapitre « Ligne de commande Linux », et chapitre « Réseau » avec son module « Masques réseau ».
+*Déjà livré depuis la fiche initiale :* modes « prédire la sortie » et « trouver le bug », identification des élèves, suivi de progression, sessions pilotées par l'enseignant, notation sur 20, historique et export CSV des scores, exercice d'entrée avec exécution pas à pas, comptes enseignants, mode examen, chapitre QCM avec import Excel, chapitre « Ligne de commande Linux », chapitre « Réseau » avec son module « Masques réseau », et chapitre « Docker » avec ses questions de cours.
 
 ---------------------------------------------------
 ⚠️ Contraintes, risques et limites connues

@@ -346,7 +346,8 @@
 
   function renderDiagnoses(blank) {
     el.diagList.textContent = "";
-    el.diagLegend.textContent = blank.label;
+    el.diagLegend.textContent = "";
+    richText(el.diagLegend, blank.label);   // une question cite du code
     blank.options.forEach(function (opt) {
       var label = document.createElement("label");
       label.className = "diagnosis";
