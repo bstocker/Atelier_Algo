@@ -174,11 +174,11 @@ Quatre chapitres aujourd'hui : **Langage C**, **Ligne de commande Linux** et **R
 | Les arguments de la ligne de commande | ●●○○ | 7 | `argc`, `argv`, `atoi`, et le piège de `argv[0]` |
 | Itératif et récursif | ●●●○ | 6 | Cas d'arrêt, pas, débordement de pile |
 
-**28 exercices de Linux** répartis en quatre modules :
+**29 exercices de Linux** répartis en quatre modules :
 
 | Module | Niveau | Exercices | Ce qu'il fait travailler |
 | --- | --- | --- | --- |
-| Fichiers et dossiers | ●○○○ | 8 | `pwd`, `cd`, `ls -a`, `wc`, `head` / `tail`, `cp` / `mv`, `>` et `>>` |
+| Fichiers et dossiers | ●○○○ | 9 | `pwd`, `cd`, `ls -a`, `ls -1` / `ls -l`, `wc`, `head` / `tail`, `cp` / `mv`, `>` et `>>` |
 | Filtrer, trier, compter | ●●○○ | 7 | `grep`, `cut`, `sort`, `uniq`, et le tube qui les enchaîne |
 | Droits et recherche | ●●●○ | 6 | `ls -l`, `chmod` octal et symbolique, `find`, `-delete` |
 | Le shell : variables et enchaînements | ●●●● | 7 | `$1` et `$#`, `&&` / `\|\|`, `for`, les étoiles, `sed`, `awk` |
@@ -189,7 +189,7 @@ Quatre chapitres aujourd'hui : **Langage C**, **Ligne de commande Linux** et **R
 | --- | --- | --- | --- |
 | Masques réseau | ●●○○ | 10 | Préfixe CIDR et masque décimal, `ET` / `OU`, réseau, diffusion, nombre d'hôtes, découpage |
 
-**93 exercices de C, de Linux et de réseau**, plus les 15 questions du QCM livré.
+**94 exercices de C, de Linux et de réseau**, plus les 15 questions du QCM livré.
 
 **Ajouter un module** tient en trois gestes : un fichier dans `atelier/modules/`, son import dans `atelier/exercises.py`, et son entrée dans un chapitre. **Ajouter un QCM** ne demande pas de code du tout : un classeur Excel déposé depuis la console suffit.
 
@@ -780,7 +780,7 @@ Où vit la base, sous quel mode de journalisation, sur quel type de disque, et c
 pip install -r requirements.txt
 export ATELIER_SECRET_KEY=dev ATELIER_ADMIN_USER=prof ATELIER_ADMIN_PASSWORD=secret
 flask --app flask_app run --debug
-python3 -m unittest test_atelier -v     # 183 tests
+python3 -m unittest test_atelier -v     # 188 tests
 ```
 
 ---------------------------------------------------
@@ -800,7 +800,7 @@ Un motif ou une fonctionnalité est considéré terminé quand :
 - [x] La note est bornée à [0, 20] et figée à la clôture de la session.
 - [x] L'interface reste lisible en thème clair et sombre, du mobile au grand écran.
 
-La suite `test_atelier.py` couvre ces points (183 tests).
+La suite `test_atelier.py` couvre ces points (188 tests).
 
 ---------------------------------------------------
 🚧 Évolutions et backlog

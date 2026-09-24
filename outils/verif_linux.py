@@ -21,10 +21,11 @@ colonne propriétaire/taille/date de `ls -l`, que les exercices de droits
 inventent. Seule la colonne des droits y est comparée.
 """
 
-import itertools, os, shutil, subprocess, sys, tempfile
+import datetime, itertools, os, shutil, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 from atelier import exercises as ex
+from atelier.modules.linux_fichiers import DETAILS
 
 def run(script, cwd):
     r = subprocess.run(["bash", "-c", script], cwd=cwd,
@@ -89,6 +90,30 @@ def prep_caches(d, p):
     for nom in p["caches"] + p["visibles"]:
         open(os.path.join(d, nom), "w").close()
 verifie("lx_caches", prep_caches, lambda p, c: c)
+
+def passee(date):
+    """`Sep 12 10:15` -> la date la plus récente qui ne soit pas future."""
+    maintenant = datetime.datetime.now()
+    quand = datetime.datetime.strptime(
+        "%d %s" % (maintenant.year, date), "%Y %b %d %H:%M")
+    if quand > maintenant:
+        quand = quand.replace(year=maintenant.year - 1)
+    return quand.strftime("%Y-%m-%d %H:%M")
+
+def prep_details(d, p):
+    prep_caches(d, p)
+    for nom, (taille, date) in zip(p["visibles"], DETAILS[p["g"]]):
+        chemin = os.path.join(d, nom)
+        with open(chemin, "wb") as fh:
+            fh.write(b"a" * taille)          # un vrai bloc, pas un trou
+        os.chmod(chemin, 0o644)
+        subprocess.run(["touch", "-d", passee(date), chemin], check=True)
+# Le propriétaire est celui qui lance l'outil : on le rebaptise comme
+# l'exercice. Les dates restent affichées à l'heure tant qu'elles datent
+# de moins de six mois, sinon `ls` passe à l'année.
+verifie("lx_un_par_ligne", prep_details,
+        lambda p, c: 'LC_TIME=C %s | sed "s/ $(id -un) $(id -gn) / %s %s /"'
+        % (c, p["user"], p["user"]))
 
 def prep_texte(d, p):
     ecrire(d, p["nom"], p["lignes"])

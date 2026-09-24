@@ -18,6 +18,17 @@ DOSSIERS = (
     ("alan", (".alias", ".config"), ("machine.txt", "notes.md")),
 )
 
+# `ls -l` des entrées visibles de chaque dossier : taille et date de
+# modification, dans l'ordre de DOSSIERS. Toutes les tailles restent sous
+# 4 096 octets : chaque fichier occupe alors un bloc, compté 4 par
+# `total`.
+DETAILS = (
+    ((812, "Sep 12 10:15"), (3406, "Sep 18 16:40")),
+    ((2210, "Sep 10 09:02"), (145, "Sep 21 18:30")),
+    ((3977, "Aug 29 14:12"), (530, "Sep 15 11:48")),
+    ((1204, "Sep 16 08:55"), (96, "Sep 20 17:05")),
+)
+
 # Chemins courants, tous à deux crans au moins sous le dossier personnel :
 # sans cela `..` et `~` mèneraient au même endroit.
 CHEMINS = (
@@ -102,8 +113,8 @@ CACHES = Pattern(
         "et `..` (le dossier parent).",
         "`-A` montre la même chose **sans** `.` ni `..`. C'est toute la "
         "différence entre les deux options.",
-        "`-1` demande un nom par ligne, au lieu des colonnes "
-        "habituelles, et `-r` renverse l'ordre.",
+        "`-1` (le **chiffre** un, pas la lettre `l`) demande un nom par "
+        "ligne, au lieu des colonnes habituelles, et `-r` renverse l'ordre.",
     ),
     dims=(("g", 0, 3),),
     derive=_dossier,
@@ -120,6 +131,64 @@ $ @cmd@""",
             ("c", "ls -1A", lambda p: trier(p["caches"] + p["visibles"])),
             ("d", "ls -1Ar",
              lambda p: trier(p["caches"] + p["visibles"])[::-1]),
+        )),
+    },
+    ref={"cmd": "a"},
+    rows=lambda p, get: get("cmd")(p),
+    level=1,
+)
+
+
+# --------------------------------------------------------------------------
+# Un nom par ligne
+# --------------------------------------------------------------------------
+
+def _long(p):
+    """`ls -l` du dossier tiré : les tailles s'alignent à droite."""
+    user, _caches, visibles = DOSSIERS[p["g"]]
+    details = DETAILS[p["g"]]
+    largeur = max(len(str(taille)) for taille, _date in details)
+    lignes = ["-rw-r--r-- 1 %s %s %*d %s %s"
+              % (user, user, largeur, taille, date, nom)
+              for nom, (taille, date) in zip(visibles, details)]
+    return ["total %d" % (4 * len(visibles))] + lignes
+
+
+def _details(p):
+    params = _dossier(p)
+    params["long"] = "\n".join(_long(p))
+    return params
+
+
+UN_PAR_LIGNE = Pattern(
+    key="lx_un_par_ligne",
+    name="Un nom par ligne",
+    brief="Afficher seulement les noms, un par ligne, sans les détails.",
+    why="`-1` et `-l` se ressemblent à l'œil, pas dans le terminal.",
+    lesson=lecon(
+        "`ls -l` — la **lettre** L minuscule, pour *long* — détaille chaque "
+        "entrée : droits, propriétaire, groupe, taille, date de "
+        "modification, puis le nom.",
+        "`ls -1` — le **chiffre** un — n'affiche que les noms, un par "
+        "ligne.",
+        "Dans beaucoup de polices, `l` et `1` se ressemblent : fiez-vous à "
+        "la sortie, pas à la forme de la commande.",
+        "La ligne `total` de `ls -l` donne la place occupée sur le disque, "
+        "en blocs d'un kilo-octet.",
+    ),
+    dims=(("g", 0, 3),),
+    derive=_details,
+    tpl="""$ pwd
+/home/@user@
+$ ls -l
+@long@
+$ @cmd@""",
+    blanks={
+        "cmd": ("Commande à taper", _opts(
+            ("a", "ls -1", lambda p: trier(p["visibles"])),
+            ("b", "ls -l", _long),
+            ("c", "ls -1r", lambda p: trier(p["visibles"])[::-1]),
+            ("d", "ls -1A", lambda p: trier(p["caches"] + p["visibles"])),
         )),
     },
     ref={"cmd": "a"},
@@ -421,14 +490,15 @@ PREDIRE_RANGER = predict_from(
 )
 
 
-PATTERNS = (CACHES, PARENT, COMPTER, FIN_JOURNAL, RANGER, AJOUTER,
+PATTERNS = (CACHES, UN_PAR_LIGNE, PARENT, COMPTER, FIN_JOURNAL, RANGER, AJOUTER,
             BUG_ECRASEMENT, PREDIRE_RANGER)
 
 MODULE = Module(
     key="linux_fichiers",
     title="Fichiers et dossiers",
     level=1,
-    summary="Se repérer avec pwd et cd, lister avec ls, compter avec wc, "
+    summary="Se repérer avec pwd et cd, lister avec ls -1 et ls -l, "
+            "compter avec wc, "
             "copier, déplacer, et rediriger une sortie dans un fichier.",
     keys=tuple(p.key for p in PATTERNS),
 )

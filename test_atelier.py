@@ -1972,7 +1972,7 @@ class LinuxTest(unittest.TestCase):
     son terminal.
     """
 
-    LINUX_KEYS = ("lx_caches", "lx_parent", "lx_compter", "lx_fin_journal",
+    LINUX_KEYS = ("lx_caches", "lx_un_par_ligne", "lx_parent", "lx_compter", "lx_fin_journal",
                   "lx_ranger", "lx_ajouter", "lx_chercher", "lx_colonne",
                   "lx_trier", "lx_dedoublonner", "lx_palmares",
                   "lx_chmod_octal", "lx_chmod_symbolique", "lx_trouver",
@@ -2064,6 +2064,17 @@ class LinuxTest(unittest.TestCase):
             ex.target_rows("lx_caches", {"g": 0, **ex.PATTERNS["lx_caches"]
                                          .derive({"g": 0})}),
             [".", "..", ".bashrc", ".config", "notes.txt", "rapport.pdf"])
+
+    def test_one_name_per_line_is_not_the_long_listing(self):
+        """`-1` (chiffre un) et `-l` (lettre L) : sorties validées sur GNU ls."""
+        params = dict(g=0, **ex.PATTERNS["lx_un_par_ligne"].derive({"g": 0}))
+        self.assertEqual(ex.target_rows("lx_un_par_ligne", params),
+                         ["notes.txt", "rapport.pdf"])
+        self.assertEqual(
+            ex.build_rows("lx_un_par_ligne", params, {"cmd": "b"}),
+            ["total 8",
+             "-rw-r--r-- 1 ada ada  812 Sep 12 10:15 notes.txt",
+             "-rw-r--r-- 1 ada ada 3406 Sep 18 16:40 rapport.pdf"])
 
     def test_counting_the_lines_of_a_file(self):
         params = dict(g=0, **ex.PATTERNS["lx_compter"].derive({"g": 0}))
